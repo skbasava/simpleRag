@@ -1,4 +1,22 @@
 
+curl -X DELETE http://localhost:8080/v1/schema/AccessControlPolicy
+
+curl http://localhost:8080/v1/schema -H "Content-Type: application/json" -d '{
+  "class": "AccessControlPolicy",
+  "vectorizer": "text2vec-transformers",
+  "properties": [
+    { "name": "chunk_text", "dataType": ["text"] },
+    { "name": "project", "dataType": ["text"] },
+    { "name": "mpu_name", "dataType": ["text"] },
+    { "name": "rg_index", "dataType": ["int"] },
+    { "name": "profile", "dataType": ["text"] }
+  ]
+}'
+
+
+
+
+
 logging 
 
 # -----------------------------
