@@ -1,3 +1,194 @@
+
+logging 
+
+# -----------------------------
+# DEBUG CONFIG
+# -----------------------------
+
+DEBUG_MODE = os.getenv("INGEST_DEBUG", "false").lower() == "true"
+DEBUG_SQL  = os.getenv("INGEST_DEBUG_SQL", "false").lower() == "true"
+
+logging.basicConfig(
+    level=logging.DEBUG if DEBUG_MODE else logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+
+log = logging.getLogger("INGEST")
+
+
+def dbg(msg: str):
+    if DEBUG_MODE:
+        log.debug(msg)
+
+def info(msg: str):
+    log.info(msg)
+
+def warn(msg: str):
+    log.warning(msg)
+
+def err(msg: str):
+    log.error(msg)
+
+def ingest_project(project_dir: str):
+    project = os.path.basename(project_dir)
+
+    info(f"[PROJECT] {project}")
+
+    for xml_file in glob.glob(os.path.join(project_dir, "*.xml")):
+        info(f"  → Parsing {xml_file}")
+
+        tree = etree.parse(xml_file)
+        root = tree.getroot()
+
+        for mpu_node in root.findall(".//MPU"):
+            mpu_name = mpu_node.get("name")
+
+            if not mpu_name:
+                err("MPU node found without name attribute")
+                raise RuntimeError("MPU node found without name attribute")
+
+            info(f"    [MPU] {mpu_name}")
+
+            for prtn_node in mpu_node.findall(".//PRTn"):
+                prtn = parse_prtn(prtn_node)
+
+                dbg(
+                    f"      [RG {prtn['rg_index']}] "
+                    f"profile={prtn['profile']} "
+                    f"start={prtn['start_hex']} end={prtn['end_hex']}"
+                )
+
+                ingest_prtn(project, mpu_name, prtn)
+
+def ingest_prtn(project: str, mpu_name: str, prtn: Dict[str, Any]):
+
+    rg_index = prtn["rg_index"]
+    profile  = prtn["profile"]
+    raw_xml  = prtn["raw_xml"]
+    xml_hash = sha256(raw_xml)
+
+    dbg(f"[CHECK] {project}/{mpu_name}/RG{rg_index}/{profile}")
+
+    # -----------------------------
+    # 1️⃣ SAME VERSION GUARD
+    # -----------------------------
+
+    same_version = pg_fetch_one(
+        """
+        SELECT chunk_id, xml_hash, is_active
+        FROM policy_chunks
+        WHERE project=%s
+          AND branch='main'
+          AND mpu_name=%s
+          AND rg_index=%s
+          AND COALESCE(profile,'')=COALESCE(%s,'')
+          AND policy_version=%s
+        """,
+        (project, mpu_name, rg_index, profile, POLICY_VERSION)
+    )
+
+    if same_version:
+        chunk_id, old_hash, is_active = same_version
+
+        dbg(
+            f"[FOUND-SAME-VERSION] RG{rg_index} "
+            f"hash_db={old_hash[:12]} hash_xml={xml_hash[:12]} "
+            f"active={is_active}"
+        )
+
+        if old_hash == xml_hash:
+            info(f"      ⏭️ SKIP RG {rg_index} (same version, unchanged)")
+            return
+
+        # Illegal mutation
+        err(
+            f"🔥 ILLEGAL CHANGE: {project}/{mpu_name}/RG{rg_index}/{profile} "
+            f"modified without version bump"
+        )
+        raise RuntimeError(
+            f"Policy modified without version bump: "
+            f"{project}/{mpu_name}/RG{rg_index}/{profile}"
+        )
+
+    # -----------------------------
+    # 2️⃣ FIND CURRENT ACTIVE POLICY
+    # -----------------------------
+
+    active_row = pg_fetch_one(
+        """
+        SELECT chunk_id, xml_hash
+        FROM policy_chunks
+        WHERE project=%s
+          AND mpu_name=%s
+          AND rg_index=%s
+          AND COALESCE(profile,'')=COALESCE(%s,'')
+          AND is_active=true
+        """,
+        (project, mpu_name, rg_index, profile)
+    )
+
+    if active_row:
+        old_chunk_id, old_hash = active_row
+
+        dbg(
+            f"[ACTIVE-FOUND] RG{rg_index} "
+            f"old_chunk={old_chunk_id}"
+        )
+
+        info(f"      ♻️ UPDATE RG {rg_index}")
+
+        # Deactivate previous
+        pg_execute(
+            "UPDATE policy_chunks SET is_active=false WHERE chunk_id=%s",
+            (old_chunk_id,)
+        )
+
+        delete_weaviate_vector(old_chunk_id)
+
+        new_chunk_id = str(uuid.uuid4())
+        insert_new_policy(
+            project, mpu_name, prtn,
+            xml_hash, new_chunk_id,
+            supersedes=old_chunk_id
+        )
+
+        info(f"      ✅ Inserted new RG {rg_index} (ACTIVE)")
+        return
+
+    # -----------------------------
+    # 3️⃣ FIRST INSERT
+    # -----------------------------
+
+    info(f"      ✅ INSERT RG {rg_index} (first seen)")
+
+    new_chunk_id = str(uuid.uuid4())
+    insert_new_policy(
+        project, mpu_name, prtn,
+        xml_hash, new_chunk_id
+    )
+
+def pg_execute(query: str, params: tuple):
+    if DEBUG_SQL:
+        dbg(f"[SQL] {query.strip()} | params={params}")
+    cur = pg.cursor()
+    cur.execute(query, params)
+
+def pg_fetch_one(query: str, params: tuple):
+    if DEBUG_SQL:
+        dbg(f"[SQL] {query.strip()} | params={params}")
+    cur = pg.cursor()
+    cur.execute(query, params)
+    return cur.fetchone()
+
+
+
+
+
+
+
+
+
 CREATE TABLE policy_chunks (
 
     chunk_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
