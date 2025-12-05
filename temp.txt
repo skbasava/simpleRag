@@ -1,3 +1,74 @@
+CREATE TABLE policy_chunks (
+
+    chunk_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    project TEXT NOT NULL,
+    branch  TEXT DEFAULT 'main',
+    file_path TEXT,
+    file_version TEXT,
+    policy_version TEXT NOT NULL,
+    xml_path TEXT,
+
+    mpu_name TEXT NOT NULL,
+    rg_index INT  NOT NULL,
+    profile  TEXT,
+
+    policy_id    TEXT,
+    policy_title TEXT,
+
+    start_dec BIGINT,
+    end_dec   BIGINT,
+    start_hex TEXT,
+    end_hex   TEXT,
+
+    rdomains TEXT[],
+    wdomains TEXT[],
+    rvmids   TEXT[],
+    wvmids   TEXT[],
+
+    static    BOOLEAN,
+    confirmed BOOLEAN,
+    enabled   BOOLEAN,
+
+    raw_xml  TEXT NOT NULL,
+    xml_hash TEXT NOT NULL,
+
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    supersedes_chunk_id UUID NULL,
+
+    weaviate_object_id UUID UNIQUE NOT NULL,
+
+    created_at TIMESTAMP DEFAULT NOW(),
+
+    UNIQUE (project, branch, mpu_name, rg_index, profile, policy_version)
+);
+
+CREATE INDEX idx_active_policy
+ON policy_chunks(project, branch, mpu_name, rg_index, profile)
+WHERE is_active = true;
+
+CREATE INDEX idx_project_mpu
+ON policy_chunks(project, mpu_name);
+
+CREATE INDEX idx_addr_range
+ON policy_chunks(start_dec, end_dec);
+
+CREATE INDEX idx_weaviate_id
+ON policy_chunks(weaviate_object_id);
+
+CREATE INDEX idx_xml_hash
+ON policy_chunks(xml_hash);
+
+
+
+
+
+
+
+
+
+
+
 
 export PG_HOST=localhost
 export PG_DB=ragdb
