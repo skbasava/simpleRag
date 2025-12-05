@@ -1,3 +1,12 @@
+
+export PG_HOST=localhost
+export PG_DB=ragdb
+export PG_USER=raguser
+export PG_PASSWORD=ragpass
+export WEAVIATE_URL=http://localhost:8080
+export POLICY_VERSION=v1.0    # change per ingestion
+
+
 class PropagateRequest(BaseModel):
     parent_project: str
     child_project: str
