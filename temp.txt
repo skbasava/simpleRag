@@ -1,4 +1,341 @@
 
+Profile normalisation ("" → "TZ")
+
+Add this helper near the top:
+def normalize_profile(raw: str | None) -> str:
+    """
+    Canonical profile rules:
+    - None or ""  => "TZ"
+    - strip spaces otherwise
+    """
+    if raw is None:
+        return "TZ"
+    raw = raw.strip()
+    return raw if raw else "TZ"
+
+Update parse_prtn
+"profile": normalize_profile(node.get("profile")),
+
+Now:
+	•	profile="" → "TZ"
+	•	profile=None → "TZ"
+	•	MSA / TME_FW / TME_ROM stay as-is
+
+from lxml import etree
+
+def canonical_xml(xml_str: str) -> str:
+    """
+    Canonicalize XML to avoid whitespace / attribute order noise.
+    """
+    root = etree.fromstring(xml_str.encode())
+    return etree.tostring(root, method="c14n").decode()
+
+canonical = canonical_xml(prtn["raw_xml"])
+xml_hash = sha256(canonical)
+
+import re
+
+def bump_version(prev: str | None) -> str:
+    """
+    Very simple version bumper.
+    - If prev is None          -> "v1.0"
+    - If prev=="v1.0"          -> "v1.1"
+    - If prev=="v2.3"          -> "v2.4"
+    - If format unknown        -> prev + "+1"
+    """
+    if prev is None:
+        return "v1.0"
+
+    m = re.match(r"^v?(\d+)\.(\d+)$", prev)
+    if not m:
+        return prev + "+1"
+
+    major, minor = int(m.group(1)), int(m.group(2))
+    return f"v{major}.{minor+1}"
+
+Replace ingest_prtn with auto-version logic
+
+Here is a complete version of ingest_prtn that:
+	•	Normalises profile (already done in parse_prtn)
+	•	Looks up latest version for (project, mpu, RG, profile)
+	•	Skips if same hash
+	•	Otherwise auto-bumps version and inserts new row
+	•	Deactivates previous active row(s)
+	•	Prints a diff between old and new
+
+def ingest_prtn(project: str, mpu_name: str, prtn: dict):
+
+    rg_index = prtn["rg_index"]
+    profile  = prtn["profile"]          # already normalized
+    raw_xml  = prtn["raw_xml"]
+
+    canonical = canonical_xml(raw_xml)
+    xml_hash  = sha256(canonical)
+
+    info(f"      [RG {rg_index}] profile={profile} start={prtn['start_hex']} end={prtn['end_hex']}")
+
+    # 1️⃣ Look up latest version for this (project, mpu, RG, profile)
+    latest = pg_fetch_one(
+        """
+        SELECT chunk_id, xml_hash, policy_version, is_active,
+               start_hex, end_hex, rdomains, wdomains, rvmids, wvmids,
+               static, confirmed, enabled
+        FROM policy_chunks
+        WHERE project=%s
+          AND branch='main'
+          AND mpu_name=%s
+          AND rg_index=%s
+          AND profile=%s
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (project, mpu_name, rg_index, profile)
+    )
+
+    # 2️⃣ No previous version → first insert
+    if not latest:
+        new_ver = bump_version(None)
+        info(f"      ✅ INSERT RG {rg_index} / {profile} (first seen, ver={new_ver})")
+
+        new_chunk_id = str(uuid.uuid4())
+        insert_new_policy(
+            project, mpu_name, prtn,
+            xml_hash, new_chunk_id,
+            policy_version=new_ver,
+            supersedes=None
+        )
+        return
+
+    # There *is* a previous version
+    (old_chunk_id, old_hash, old_ver, old_active,
+     old_start_hex, old_end_hex, old_rdomains, old_wdomains,
+     old_rvmids, old_wvmids, old_static, old_confirmed,
+     old_enabled) = latest
+
+    if old_hash == xml_hash:
+        # Same content as last version → skip
+        info(f"      ⏭️ SKIP RG {rg_index} / {profile} (same content, ver={old_ver})")
+        return
+
+    # 3️⃣ Content changed → auto bump version
+    new_ver = bump_version(old_ver)
+    warn(f"      ♻️ CHANGE DETECTED RG {rg_index} / {profile}: {old_ver} → {new_ver}")
+
+    # 3a️⃣ emit diff
+    diffs = []
+
+    def add_diff(field, old, new):
+        if old != new:
+            diffs.append(f"        - {field}: {old} → {new}")
+
+    add_diff("start_hex", old_start_hex, prtn["start_hex"])
+    add_diff("end_hex",   old_end_hex,   prtn["end_hex"])
+    add_diff("rdomains",  old_rdomains,  prtn["rdomains"])
+    add_diff("wdomains",  old_wdomains,  prtn["wdomains"])
+    add_diff("rvmids",    old_rvmids,    prtn["rvmids"])
+    add_diff("wvmids",    old_wvmids,    prtn["wvmids"])
+    add_diff("static",    old_static,    False)          # you currently fix static=False
+    add_diff("confirmed", old_confirmed, prtn["confirmed"])
+    add_diff("enabled",   old_enabled,   True)           # you currently fix enabled=True
+
+    if diffs:
+        warn("      🔍 Diff vs previous:")
+        for line in diffs:
+            warn(line)
+
+    # 3b️⃣ deactivate any active rows for this (RG, profile)
+    pg_execute(
+        """
+        UPDATE policy_chunks
+        SET is_active=false
+        WHERE project=%s AND mpu_name=%s AND rg_index=%s AND profile=%s
+          AND is_active=true
+        """,
+        (project, mpu_name, rg_index, profile)
+    )
+
+    delete_weaviate_vector(old_chunk_id)
+
+    # 3c️⃣ insert new version, linked via supersedes_chunk_id
+    new_chunk_id = str(uuid.uuid4())
+    insert_new_policy(
+        project, mpu_name, prtn,
+        xml_hash, new_chunk_id,
+        policy_version=new_ver,
+        supersedes=old_chunk_id
+    )
+
+    info(f"      ✅ INSERT RG {rg_index} / {profile} (new ver={new_ver})")
+
+Update insert_new_policy signature
+
+Change it to accept an explicit policy_version:
+
+def insert_new_policy(
+    project: str,
+    mpu_name: str,
+    prtn: dict,
+    xml_hash: str,
+    chunk_id: str,
+    policy_version: str,
+    supersedes: str | None = None
+):
+    start_dec = hex_to_dec(prtn["start_hex"])
+    end_dec   = hex_to_dec(prtn["end_hex"])
+
+    pg_execute(
+        """
+        INSERT INTO policy_chunks (
+            chunk_id, project, branch, file_path, policy_version,
+            mpu_name, rg_index, profile,
+            start_dec, end_dec, start_hex, end_hex,
+            rdomains, wdomains, rvmids, wvmids,
+            static, confirmed, enabled,
+            raw_xml, xml_hash,
+            is_active, supersedes_chunk_id,
+            weaviate_object_id
+        )
+        VALUES (%s,%s,'main',%s,%s,
+                %s,%s,%s,
+                %s,%s,%s,%s,
+                %s,%s,%s,%s,
+                %s,%s,%s,
+                %s,%s,
+                true,%s,
+                %s)
+        """,
+        (
+            chunk_id,
+            project,
+            prtn.get("file_path"),   # or None
+            policy_version,
+            mpu_name,
+            prtn["rg_index"],
+            prtn["profile"],
+            start_dec,
+            end_dec,
+            prtn["start_hex"],
+            prtn["end_hex"],
+            prtn["rdomains"],
+            prtn["wdomains"],
+            prtn["rvmids"],
+            prtn["wvmids"],
+            False,                   # static
+            prtn["confirmed"],
+            True,                    # enabled
+            prtn["raw_xml"],
+            xml_hash,
+            supersedes,
+            chunk_id,
+        )
+    )
+
+    # build chunk_text & insert into Weaviate as before …
+
+def insert_new_policy(
+    project: str,
+    mpu_name: str,
+    prtn: dict,
+    xml_hash: str,
+    chunk_id: str,
+    policy_version: str,
+    supersedes: str | None = None
+):
+    start_dec = hex_to_dec(prtn["start_hex"])
+    end_dec   = hex_to_dec(prtn["end_hex"])
+
+    pg_execute(
+        """
+        INSERT INTO policy_chunks (
+            chunk_id, project, branch, file_path, policy_version,
+            mpu_name, rg_index, profile,
+            start_dec, end_dec, start_hex, end_hex,
+            rdomains, wdomains, rvmids, wvmids,
+            static, confirmed, enabled,
+            raw_xml, xml_hash,
+            is_active, supersedes_chunk_id,
+            weaviate_object_id
+        )
+        VALUES (%s,%s,'main',%s,%s,
+                %s,%s,%s,
+                %s,%s,%s,%s,
+                %s,%s,%s,%s,
+                %s,%s,%s,
+                %s,%s,
+                true,%s,
+                %s)
+        """,
+        (
+            chunk_id,
+            project,
+            prtn.get("file_path"),   # or None
+            policy_version,
+            mpu_name,
+            prtn["rg_index"],
+            prtn["profile"],
+            start_dec,
+            end_dec,
+            prtn["start_hex"],
+            prtn["end_hex"],
+            prtn["rdomains"],
+            prtn["wdomains"],
+            prtn["rvmids"],
+            prtn["wvmids"],
+            False,                   # static
+            prtn["confirmed"],
+            True,                    # enabled
+            prtn["raw_xml"],
+            xml_hash,
+            supersedes,
+            chunk_id,
+        )
+    )
+
+In rag_api.py:
+
+class PropagateRequest(BaseModel):
+    parent_project: str
+    child_project: str
+    mpu_name: Optional[str] = None
+    profile: Optional[str] = None   # NEW
+
+Normalize profile in handler:
+
+from typing import Optional
+
+def normalize_profile_query(p: Optional[str]) -> Optional[str]:
+    if p is None:
+        return None
+    p = p.strip()
+    return "TZ" if p == "" else p
+
+propagate 
+@app.post("/propagate")
+def propagate_policies(req: PropagateRequest):
+    profile = normalize_profile_query(req.profile)
+
+    parent_rows = pg_get_active_policies(req.parent_project, req.mpu_name, profile)
+    child_rows  = pg_get_active_policies(req.child_project,  req.mpu_name, profile)
+    ...
+
+def pg_get_active_policies(project: str, mpu_name: Optional[str] = None, profile: Optional[str] = None):
+    sql = """
+    SELECT *
+    FROM policy_chunks
+    WHERE project = %s
+      AND is_active = true
+      AND (%s IS NULL OR mpu_name = %s)
+      AND (%s IS NULL OR profile = %s)
+    ORDER BY mpu_name, rg_index, profile;
+    """
+    params = (project, mpu_name, mpu_name, profile, profile)
+    return pg_fetch_rows(sql, params)
+
+
+
+
+
+
 curl -X DELETE http://localhost:8080/v1/schema/AccessControlPolicy
 
 curl http://localhost:8080/v1/schema -H "Content-Type: application/json" -d '{
