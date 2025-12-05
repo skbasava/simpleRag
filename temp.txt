@@ -1,1 +1,110 @@
+class PropagateRequest(BaseModel):
+    parent_project: str
+    child_project: str
+    mpu_name: Optional[str] = None   # null = all MPUs
+
+
+def pg_get_active_policies(project: str, mpu_name: Optional[str] = None):
+    sql = """
+    SELECT *
+    FROM policy_chunks
+    WHERE project = %s
+      AND is_active = true
+      AND (%s IS NULL OR mpu_name = %s)
+    ORDER BY mpu_name, rg_index, profile;
+    """
+
+    params = (project, mpu_name, mpu_name)
+    return pg_fetch_rows(sql, params)
+
+
+def logical_key(row: Dict[str, Any]):
+    """
+    Logical policy identity for propagation & diff.
+    """
+    return (row["mpu_name"], row["rg_index"], row.get("profile"))
+
+
+@app.post("/propagate")
+def propagate_policies(req: PropagateRequest):
+    """
+    Parent → Child policy propagation planner.
+
+    Returns:
+      - propagate_missing : policies present in parent but missing in child
+      - propagate_review  : policies present in both but with different rules
+    """
+
+    parent_rows = pg_get_active_policies(req.parent_project, req.mpu_name)
+    child_rows  = pg_get_active_policies(req.child_project,  req.mpu_name)
+
+    parent_map = {logical_key(r): r for r in parent_rows}
+    child_map  = {logical_key(r): r for r in child_rows}
+
+    propagate_missing = []
+    propagate_review  = []
+
+    compare_fields = [
+        "start_dec",
+        "end_dec",
+        "rdomains",
+        "wdomains",
+        "rvmids",
+        "wvmids",
+        "static",
+        "confirmed",
+        "enabled",
+    ]
+
+    for key, parent_row in parent_map.items():
+        child_row = child_map.get(key)
+
+        # -----------------------------
+        # Case 1: Missing in Child → MUST PROPAGATE
+        # -----------------------------
+        if not child_row:
+            propagate_missing.append(
+                {
+                    "mpu_name": parent_row["mpu_name"],
+                    "rg_index": parent_row["rg_index"],
+                    "profile": parent_row.get("profile"),
+                    "parent_policy": parent_row,
+                }
+            )
+            continue
+
+        # -----------------------------
+        # Case 2: Exists in both → CHECK FOR DIFFERENCES
+        # -----------------------------
+        diffs = {}
+        for f in compare_fields:
+            if parent_row[f] != child_row[f]:
+                diffs[f] = {
+                    req.parent_project: parent_row[f],
+                    req.child_project:  child_row[f],
+                }
+
+        if diffs:
+            propagate_review.append(
+                {
+                    "mpu_name": parent_row["mpu_name"],
+                    "rg_index": parent_row["rg_index"],
+                    "profile": parent_row.get("profile"),
+                    "diffs": diffs,
+                    "parent_policy": parent_row,
+                    "child_policy": child_row,
+                }
+            )
+
+    return {
+        "parent_project": req.parent_project,
+        "child_project": req.child_project,
+        "mpu_name": req.mpu_name,
+        "propagate_missing": propagate_missing,
+        "propagate_review": propagate_review,
+        "summary": {
+            "missing_count": len(propagate_missing),
+            "review_count": len(propagate_review),
+        },
+    }
 
