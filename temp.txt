@@ -1,4 +1,11 @@
 
+def extract_project_from_fqname(fqname: str) -> str:
+    if not fqname or "." not in fqname:
+        raise RuntimeError(f"Invalid fqname, cannot extract project: {fqname}")
+    return fqname.split(".", 1)[0].strip()
+
+
+
 
 -- ================================
 -- Core Table: policy_chunks
