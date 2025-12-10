@@ -1,0 +1,72 @@
+version: "3.9"
+
+services:
+
+  rag-postgres:
+    image: postgres:16
+    container_name: rag-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ragdb
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ragpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - rag_pgdata:/var/lib/postgresql/data
+      - ./postgres/init-schema.sql:/docker-entrypoint-initdb.d/01-init-schema.sql:ro
+
+  transformers:
+    image: semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
+    container_name: rag-transformers
+    restart: always
+
+  weaviate:
+    image: semitechnologies/weaviate:1.25.2
+    container_name: rag-weaviate
+    restart: always
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      ENABLE_MODULES: "text2vec-transformers"
+      DEFAULT_VECTORIZER_MODULE: "text2vec-transformers"
+      TRANSFORMERS_INFERENCE_API: "http://transformers:8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - transformers
+    volumes:
+      - rag_weaviate:/var/lib/weaviate
+
+  weaviate-schema-init:
+    image: curlimages/curl:8.5.0
+    container_name: rag-weaviate-schema-init
+    depends_on:
+      - weaviate
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      until curl -s http://weaviate:8080/v1/.well-known/ready; do sleep 2; done &&
+      curl -s -X POST http://weaviate:8080/v1/schema
+      -H "Content-Type: application/json"
+      -d '{
+        "class": "AccessControlPolicy",
+        "vectorizer": "text2vec-transformers",
+        "description": "Vectorized MPU Region Access Control Policies",
+        "properties": [
+          { "name": "project",  "dataType": ["text"] },
+          { "name": "mpu_name", "dataType": ["text"] },
+          { "name": "rg_index", "dataType": ["int"] },
+          { "name": "profile",  "dataType": ["text"] },
+          { "name": "version",  "dataType": ["text"] },
+          { "name": "start",    "dataType": ["int"] },
+          { "name": "end",      "dataType": ["int"] },
+          { "name": "chunk_index", "dataType": ["int"] },
+          { "name": "chunk_text",  "dataType": ["text"] }
+        ]
+      }' || true
+
+volumes:
+  rag_pgdata:
+  rag_weaviate:
