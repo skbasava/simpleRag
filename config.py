@@ -1,3 +1,57 @@
+
+def insert_chunk(cur, row):
+
+    sql = """
+        INSERT INTO policy_chunks (
+            project, mpu_name, rg_index, profile,
+            start_hex, end_hex,
+            start_dec, end_dec,
+            identity_hash, content_hash,
+            chunk_index, chunk_text,
+            vector_id, xml_path,
+            is_active
+        )
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE)
+        ON CONFLICT (identity_hash, chunk_index)
+        DO UPDATE SET
+            content_hash = EXCLUDED.content_hash,
+            chunk_text   = EXCLUDED.chunk_text,
+            vector_id    = EXCLUDED.vector_id,
+            xml_path     = EXCLUDED.xml_path,
+            is_active    = TRUE
+        RETURNING id;
+    """
+
+    params = (
+        row["project"],
+        row["mpu_name"],
+        row["rg_index"],
+        row["profile"],
+        row["start_hex"],
+        row["end_hex"],
+        row["start_dec"],
+        row["end_dec"],
+        row["identity_hash"],
+        row["content_hash"],
+        row["chunk_index"],
+        row["chunk_text"],
+        row["vector_id"],
+        row["xml_path"],
+    )
+
+    try:
+        cur.execute(sql, params)
+        new_id = cur.fetchone()
+        print(f"[DB] fetch from DB {new_id}")
+        return new_id[0] if new_id else None
+
+    except Exception as e:
+        print("[DB] ERROR insert_chunk:", e)
+        print("ROW Data:", row)
+        return None
+
+
+
 POSTGRES = {
     "host": "localhost",
     "port": 5432,
