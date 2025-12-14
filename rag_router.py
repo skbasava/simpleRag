@@ -1,3 +1,4 @@
+from prompt_builder import build_final_prompt
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
 import re
@@ -171,22 +172,25 @@ def rag_query(req: QueryRequest):
     print(f"[ROUTER] Query='{q}'  → Mode={mode}")
 
     if mode == "structured":
-        result = postgres_structured_search(q)
+        rows = postgres_structured_search(q)
+        final_prompt = build_final_prompt(q, rows)
         return {
             "mode": "structured",
-            "result": result
+            "result": final_prompt
         }
 
     elif mode == "semantic":
-        result = vector_search(q)
+        rows = vector_search(q)
+        final_prompt = build_final_prompt(q, rows)
         return {
             "mode": "semantic",
-            "result": result
+            "result": final_prompt
         }
 
     else:
-        result = hybrid_search(q)
+        rows = hybrid_search(q)
+        final_prompt = build_final_prompt(q, rows)
         return {
             "mode": "hybrid",
-            "result": result
+            "result": final_prompt
         }
