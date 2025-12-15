@@ -1,3 +1,32 @@
+#!/usr/bin/env bash
+
+API_URL="http://localhost:8000/query"
+
+echo "🔍 Test 1: Missing project context"
+resp1=$(curl -s -X POST "$API_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"What is the MPU access range?"}')
+
+echo "$resp1" | jq
+
+echo "$resp1" | jq -e '.status=="clarification_required"' \
+  && echo "✅ PASS: clarification required" \
+  || echo "❌ FAIL"
+
+echo ""
+echo "🔍 Test 2: Providing project + version"
+resp2=$(curl -s -X POST "$API_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"KAANAPALI version 5.3 MPU access range"}')
+
+echo "$resp2" | jq
+
+echo "$resp2" | jq -e '.status=="success"' \
+  && echo "✅ PASS: answered with context" \
+  || echo "❌ FAIL"
+
+
+
 
 #!/usr/bin/env bash
 
