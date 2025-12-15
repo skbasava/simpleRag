@@ -1,3 +1,38 @@
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xbot-access-ctrl"
+version = "0.1.0"
+description = "RAG system for XML-based access control policies"
+requires-python = ">=3.10"
+
+dependencies = [
+  "fastapi",
+  "uvicorn",
+  "psycopg2-binary",
+  "weaviate-client",
+  "lxml",
+  "pydantic",
+  "requests",
+  "pytest"
+]
+
+[tool.setuptools]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["app/tests"]
+
+
+
+
+
+
+
 class RAGRouter:
 
     async def retrieve_async(self, query: str, filters: dict):
