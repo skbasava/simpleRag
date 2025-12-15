@@ -1,4 +1,18 @@
+class RAGRouter:
 
+    async def retrieve_async(self, query: str, filters: dict):
+        qtype = classify_query(query)
+
+        if qtype == QueryType.STRUCTURED:
+            return self.structured_search(filters)
+
+        elif qtype == QueryType.SEMANTIC:
+            return self.semantic_search(query, filters)
+
+        else:
+            structured = self.structured_search(filters)
+            semantic = self.semantic_search(query, filters)
+            return structured[:4] + semantic[:4]
 
 import os
 import requests
