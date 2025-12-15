@@ -1,3 +1,290 @@
+import weaviate
+import weaviate.classes as wvc
+from weaviate.classes.config import (
+    Configure,
+    Property,
+    DataType,
+    Tokenization,
+    VectorDistances,
+)
+
+CLASS_NAME = "AccessControlPolicy"
+
+
+def create_access_control_policy_schema(client: weaviate.WeaviateClient):
+    """
+    Creates or verifies the Weaviate schema for AccessControlPolicy.
+    Vectorizer is set to NONE (external embeddings).
+    """
+
+    # -------------------------------
+    # Define properties
+    # -------------------------------
+    properties = [
+        Property(
+            name="project",
+            data_type=DataType.TEXT,
+            tokenization=Tokenization.FIELD,
+            description="Project identifier"
+        ),
+        Property(
+            name="mpu_name",
+            data_type=DataType.TEXT,
+            tokenization=Tokenization.FIELD,
+            description="MPU name"
+        ),
+        Property(
+            name="rg_index",
+            data_type=DataType.INT,
+            description="Region group index"
+        ),
+        Property(
+            name="profile",
+            data_type=DataType.TEXT,
+            tokenization=Tokenization.FIELD,
+            description="Access profile"
+        ),
+        Property(
+            name="start",
+            data_type=DataType.INT,
+            description="Start address"
+        ),
+        Property(
+            name="end",
+            data_type=DataType.INT,
+            description="End address"
+        ),
+        Property(
+            name="chunk_index",
+            data_type=DataType.INT,
+            description="Chunk index"
+        ),
+        Property(
+            name="chunk_text",
+            data_type=DataType.TEXT,
+            tokenization=Tokenization.WORD,
+            description="Chunked text content"
+        ),
+    ]
+
+    # -------------------------------
+    # Check if collection exists
+    # -------------------------------
+    if client.collections.exists(CLASS_NAME):
+        print(f"[schema] Collection '{CLASS_NAME}' already exists. Verifying...")
+
+        collection = client.collections.get(CLASS_NAME)
+        config = collection.config.get()
+
+        existing_props = {p.name for p in config.properties}
+        expected_props = {p.name for p in properties}
+
+        missing = expected_props - existing_props
+        if missing:
+            print(f"[schema][WARN] Missing properties: {missing}")
+        else:
+            print(f"[schema] Existing schema is compatible")
+
+        return
+
+    # -------------------------------
+    # Create collection
+    # -------------------------------
+    print(f"[schema] Creating collection '{CLASS_NAME}'")
+
+    vectorizer_config = Configure.Vectorizer.none()
+
+    vector_index_config = Configure.VectorIndex.hnsw(
+        distance_metric=VectorDistances.COSINE
+    )
+
+    client.collections.create(
+        name=CLASS_NAME,
+        description="Vectorized MPU Region Access Control Policies",
+        properties=properties,
+        vectorizer_config=vectorizer_config,
+        vector_index_config=vector_index_config,
+        inverted_index_config=Configure.inverted_index(
+            index_timestamps=True,
+            index_property_length=True
+        ),
+    )
+
+    print(f"[schema] Collection '{CLASS_NAME}' created successfully")
+
+
+
+
+
+import weaviate
+import os
+
+WEAVIATE_URL = os.getenv("WEAVIATE_URL", "http://weaviate:8080")
+
+_weaviate_client = None
+
+
+def get_weaviate_client() -> weaviate.WeaviateClient:
+    global _weaviate_client
+    if _weaviate_client is None:
+        _weaviate_client = weaviate.connect_to_custom(
+            http_host="weaviate",
+            http_port=8080,
+            http_secure=False,
+            grpc_host="weaviate",
+            grpc_port=50051,
+            grpc_secure=False,
+        )
+    return _weaviate_client
+
+
+
+
+
+
+import weaviate
+from weaviate.classes.config import (
+    Configure,
+    Property,
+    DataType,
+    Tokenization,
+    VectorDistances,
+)
+
+CLASS_NAME = "AccessControlPolicy"
+
+
+def ensure_schema(client: weaviate.WeaviateClient):
+    if client.collections.exists(CLASS_NAME):
+        print(f"[weaviate] Schema '{CLASS_NAME}' already exists")
+        return
+
+    print(f"[weaviate] Creating schema '{CLASS_NAME}'")
+
+    client.collections.create(
+        name=CLASS_NAME,
+        description="Vectorized MPU Region Access Control Policies",
+        vectorizer_config=Configure.Vectorizer.none(),
+        vector_index_config=Configure.VectorIndex.hnsw(
+            distance_metric=VectorDistances.COSINE
+        ),
+        properties=[
+            Property("project", DataType.TEXT, tokenization=Tokenization.FIELD),
+            Property("mpu_name", DataType.TEXT, tokenization=Tokenization.FIELD),
+            Property("rg_index", DataType.INT),
+            Property("profile", DataType.TEXT),
+            Property("start", DataType.INT),
+            Property("end", DataType.INT),
+            Property("chunk_index", DataType.INT),
+            Property("chunk_text", DataType.TEXT, tokenization=Tokenization.WORD),
+        ],
+    )
+
+    print(f"[weaviate] Schema '{CLASS_NAME}' created")
+
+
+
+from pydantic import BaseModel
+from typing import List
+
+
+class InsertObjectRequest(BaseModel):
+    id: str
+    vector: List[float]
+    project: str
+    mpu_name: str
+    rg_index: int
+    profile: str
+    start: int
+    end: int
+    chunk_index: int
+    chunk_text: str
+
+
+class DeleteByIdRequest(BaseModel):
+    id: str
+
+
+
+
+from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
+
+from app.weaviate_client import get_weaviate_client
+from app.weaviate_schema import ensure_schema, CLASS_NAME
+from app.models import InsertObjectRequest, DeleteByIdRequest
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    client = get_weaviate_client()
+    ensure_schema(client)
+    yield
+    # Shutdown
+    client.close()
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+# -----------------------------
+# Insert object
+# -----------------------------
+@app.post("/weaviate/insert")
+def insert_object(req: InsertObjectRequest):
+    client = get_weaviate_client()
+    collection = client.collections.get(CLASS_NAME)
+
+    try:
+        collection.data.insert(
+            uuid=req.id,
+            vector=req.vector,
+            properties={
+                "project": req.project,
+                "mpu_name": req.mpu_name,
+                "rg_index": req.rg_index,
+                "profile": req.profile,
+                "start": req.start,
+                "end": req.end,
+                "chunk_index": req.chunk_index,
+                "chunk_text": req.chunk_text,
+            },
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"status": "inserted", "id": req.id}
+
+
+# -----------------------------
+# Delete object by ID
+# -----------------------------
+@app.delete("/weaviate/delete")
+def delete_object(req: DeleteByIdRequest):
+    client = get_weaviate_client()
+    collection = client.collections.get(CLASS_NAME)
+
+    try:
+        collection.data.delete_by_id(req.id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"status": "deleted", "id": req.id}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #!/bin/sh
 set -e
