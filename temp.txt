@@ -1,3 +1,40 @@
+class RAGService:
+    def __init__(self):
+        self.session = None
+        self.router = None
+        self.db_conn = None
+        self.db_cursor = None
+
+    async def startup(self):
+        """
+        Called once when app starts
+        """
+        self.session = RAGSession()
+        self.router = RAGRouter()
+
+        # Example: DB connection
+        self.db_conn, self.db_cursor = get_cursor()
+
+    async def shutdown(self):
+        """
+        Called once when app stops
+        """
+        if self.db_cursor:
+            self.db_cursor.close()
+
+        if self.db_conn:
+            self.db_conn.close()
+
+        if hasattr(self.router, "close"):
+            await self.router.close()
+
+        print("🔻 Resources released")
+
+
+
+
+
+
 #!/usr/bin/env bash
 
 API_URL="http://localhost:8000/query"
