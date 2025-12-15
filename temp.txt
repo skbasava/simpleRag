@@ -1,4 +1,22 @@
-
+{
+  "classes": [
+    {
+      "class": "AccessControlPolicy",
+      "vectorizer": "none",
+      "description": "Vectorized MPU Region Access Control Policies",
+      "properties": [
+        { "name": "project", "dataType": ["text"] },
+        { "name": "mpu_name", "dataType": ["text"] },
+        { "name": "rg_index", "dataType": ["int"] },
+        { "name": "profile", "dataType": ["text"] },
+        { "name": "start", "dataType": ["int"] },
+        { "name": "end", "dataType": ["int"] },
+        { "name": "chunk_index", "dataType": ["int"] },
+        { "name": "chunk_text", "dataType": ["text"] }
+      ]
+    }
+  ]
+}
 
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
