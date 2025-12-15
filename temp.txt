@@ -1,3 +1,28 @@
+
+#!/usr/bin/env bash
+
+API_URL="http://localhost:8000/query"
+
+echo "🔍 Test 1: Missing project context"
+curl -s -X POST "$API_URL" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What is the MPU access range?"
+  }' | jq
+
+echo ""
+echo "🔍 Test 2: Providing project + version"
+curl -s -X POST "$API_URL" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "KAANAPALI version 5.3 MPU access range"
+  }' | jq
+
+
+
+
+
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 from app.rag.service import RAGService
