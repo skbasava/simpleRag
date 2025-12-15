@@ -1,3 +1,33 @@
+
+#!/bin/sh
+set -e
+
+WEAVIATE_URL="http://weaviate:8080"
+CLASS_NAME="AccessControlPolicy"
+
+echo "[schema-init] Waiting for Weaviate..."
+until curl -sf "$WEAVIATE_URL/v1/.well-known/ready" >/dev/null; do
+  sleep 2
+done
+
+echo "[schema-init] Checking if class exists: $CLASS_NAME"
+
+if curl -sf "$WEAVIATE_URL/v1/schema/$CLASS_NAME" >/dev/null; then
+  echo "[schema-init] Class '$CLASS_NAME' already exists. Skipping creation."
+  exit 0
+fi
+
+echo "[schema-init] Creating class '$CLASS_NAME'"
+
+curl -sf -X POST "$WEAVIATE_URL/v1/schema" \
+  -H "Content-Type: application/json" \
+  --data-binary @/schema/wv-schema.json
+
+echo "[schema-init] Schema created successfully"
+
+
+
+
 {
   "classes": [
     {
