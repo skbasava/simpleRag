@@ -1,3 +1,54 @@
+
+
+curl -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{"query":"What is the MPU access range?"}'
+
+
+import pytest
+from fastapi.testclient import TestClient
+from app.api import app
+
+client = TestClient(app)
+
+
+def test_query_missing_context():
+    response = client.post(
+        "/query",
+        json={"query": "What is the MPU access range?"}
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "answer" in data
+    assert data["needs_context"] is True
+    assert "Project" in data["answer"]
+
+
+def test_query_with_project_version(monkeypatch):
+    # Mock RAGService.answer so API is isolated
+    async def mock_answer(query: str):
+        return "MOCK_FINAL_ANSWER"
+
+    monkeypatch.setattr(
+        "app.api.rag.answer",
+        mock_answer
+    )
+
+    response = client.post(
+        "/query",
+        json={"query": "KAANAPALI version 5.3 MPU access range"}
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["needs_context"] is False
+    assert data["answer"] == "MOCK_FINAL_ANSWER"
+
+
+
 class RAGService:
     def __init__(self):
         self.session = None
