@@ -1,3 +1,82 @@
+from weaviate.classes.config import (
+    Configure,
+    Property,
+    DataType,
+)
+
+def ensure_schema(client):
+    if client.collections.exists("PolicyChunks"):
+        return
+
+    client.collections.create(
+        name="PolicyChunks",
+        vectorizer_config=Configure.Vectorizer.none(),
+        properties=[
+            # IDs / filters (NOT tokenized)
+            Property(
+                name="chunk_id",
+                data_type=DataType.INT,
+                index_filterable=True,
+                index_searchable=False,
+            ),
+            Property(
+                name="rg_index",
+                data_type=DataType.INT,
+                index_filterable=True,
+                index_searchable=False,
+            ),
+
+            # Text fields (tokenized)
+            Property(
+                name="project",
+                data_type=DataType.TEXT,
+                index_filterable=True,
+                index_searchable=True,
+            ),
+            Property(
+                name="version",
+                data_type=DataType.TEXT,
+                index_filterable=True,
+                index_searchable=True,
+            ),
+            Property(
+                name="mpu_name",
+                data_type=DataType.TEXT,
+                index_filterable=True,
+                index_searchable=True,
+            ),
+            Property(
+                name="profile",
+                data_type=DataType.TEXT,
+                index_filterable=True,
+                index_searchable=True,
+            ),
+            Property(
+                name="start_hex",
+                data_type=DataType.TEXT,
+                index_filterable=True,
+                index_searchable=False,
+            ),
+            Property(
+                name="end_hex",
+                data_type=DataType.TEXT,
+                index_filterable=True,
+                index_searchable=False,
+            ),
+
+            # Vector payload
+            Property(
+                name="chunk_text",
+                data_type=DataType.TEXT,
+                index_searchable=True,
+            ),
+        ],
+    )
+
+
+
+
+
 from weaviate.classes.config import Configure, Property, DataType
 
 def ensure_schema(client):
