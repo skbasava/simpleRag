@@ -1,3 +1,53 @@
+from typing import List
+from app.rag.models import Chunk
+
+class PostgresDriver:
+    def structured_search(self, filters: dict, limit: int = 20) -> List[Chunk]:
+        sql = """
+        SELECT
+            id,
+            project,
+            mpu_name,
+            rg_index,
+            profile,
+            start_hex,
+            end_hex,
+            chunk_text
+        FROM policy_chunks
+        WHERE is_active = TRUE
+          AND (%(project)s IS NULL OR project = %(project)s)
+          AND (%(mpu_name)s IS NULL OR mpu_name = %(mpu_name)s)
+          AND (%(rg_index)s IS NULL OR rg_index = %(rg_index)s)
+          AND (%(profile)s IS NULL OR profile = %(profile)s)
+        ORDER BY rg_index, chunk_index
+        LIMIT %(limit)s
+        """
+
+        params = {
+            "project": filters.get("project"),
+            "mpu_name": filters.get("mpu_name"),
+            "rg_index": filters.get("rg_index"),
+            "profile": filters.get("profile"),
+            "limit": limit,
+        }
+
+        rows = self.fetch_all(sql, params)
+
+        return [
+            Chunk(
+                chunk_id=row["id"],
+                project=row["project"],
+                mpu_name=row["mpu_name"],
+                rg_index=row["rg_index"],
+                profile=row["profile"],
+                start_hex=row["start_hex"],
+                end_hex=row["end_hex"],
+                chunk_text=row["chunk_text"],
+                source="postgres",
+            )
+            for row in rows
+        ]
+
 
 
 
