@@ -1,4 +1,25 @@
 
+import os
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class Settings:
+    PG_DSN: str
+    WEAVIATE_URL: str
+
+    @staticmethod
+    def load() -> "Settings":
+        return Settings(
+            PG_DSN=os.environ["PG_DSN"],
+            WEAVIATE_URL=os.environ["WEAVIATE_URL"],
+        )
+
+
+settings = Settings.load()
+
+
+
 rag-system/
 ├── docker-compose.yml
 ├── Dockerfile
