@@ -1,3 +1,13 @@
+
+CREATE TABLE IF NOT EXISTS ingestion_progress (
+    xml_path TEXT PRIMARY KEY,
+    status TEXT NOT NULL CHECK (status IN ('PENDING','IN_PROGRESS','DONE','FAILED')),
+    last_chunk_index INT NOT NULL DEFAULT -1,
+    error TEXT,
+    updated_at TIMESTAMP DEFAULT now()
+);
+
+
 import weaviate
 import weaviate.classes as wvc
 from weaviate.classes.config import (
