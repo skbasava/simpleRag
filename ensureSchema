@@ -1,0 +1,77 @@
+from weaviate import WeaviateClient
+from weaviate.classes.config import (
+    Configure,
+    Property,
+    DataType,
+    Tokenization,
+    VectorDistances,
+)
+
+class WeaviateSchemaManager:
+    CLASS_NAME = "AccessControlPolicy"
+
+    def ensure_schema(self, client: WeaviateClient):
+        """
+        Ensure AccessControlPolicy class exists with explicit schema.
+        This is SAFE to call on every startup.
+        """
+
+        if client.collections.exists(self.CLASS_NAME):
+            print(f"[weaviate] Schema '{self.CLASS_NAME}' already exists")
+            return
+
+        print(f"[weaviate] Creating schema '{self.CLASS_NAME}'")
+
+        client.collections.create(
+            name=self.CLASS_NAME,
+            description="Vectorized MPU Region Access Control Policies",
+            vectorizer_config=Configure.Vectorizer.none(),
+            vector_index_config=Configure.VectorIndex.hnsw(
+                distance_metric=VectorDistances.COSINE
+            ),
+            properties=[
+                # 🔑 Identity / filtering
+                Property(
+                    name="project",
+                    data_type=DataType.TEXT,
+                    tokenization=Tokenization.FIELD,
+                ),
+                Property(
+                    name="mpu_name",
+                    data_type=DataType.TEXT,
+                    tokenization=Tokenization.FIELD,
+                ),
+                Property(
+                    name="profile",
+                    data_type=DataType.TEXT,
+                    tokenization=Tokenization.FIELD,
+                ),
+
+                # 🔢 Region information
+                Property(
+                    name="rg_index",
+                    data_type=DataType.INT,
+                ),
+                Property(
+                    name="start",
+                    data_type=DataType.INT,
+                ),
+                Property(
+                    name="end",
+                    data_type=DataType.INT,
+                ),
+
+                # 🧱 Chunking
+                Property(
+                    name="chunk_index",
+                    data_type=DataType.INT,
+                ),
+                Property(
+                    name="chunk_text",
+                    data_type=DataType.TEXT,
+                    tokenization=Tokenization.WORD,
+                ),
+            ],
+        )
+
+        print(f"[weaviate] Schema '{self.CLASS_NAME}' created successfully")
