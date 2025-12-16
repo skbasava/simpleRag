@@ -1,3 +1,67 @@
+from weaviate.classes.config import Configure, Property, DataType
+
+def ensure_schema(client):
+    if client.collections.exists("PolicyChunks"):
+        return
+
+    client.collections.create(
+        name="PolicyChunks",
+        vectorizer_config=Configure.Vectorizer.none(),
+        properties=[
+            Property(name="chunk_id", data_type=DataType.INT),
+            Property(name="project", data_type=DataType.TEXT),
+            Property(name="version", data_type=DataType.TEXT),
+            Property(name="mpu_name", data_type=DataType.TEXT),
+            Property(name="rg_index", data_type=DataType.INT),
+            Property(name="profile", data_type=DataType.TEXT),
+            Property(name="start_hex", data_type=DataType.TEXT),
+            Property(name="end_hex", data_type=DataType.TEXT),
+            Property(name="chunk_text", data_type=DataType.TEXT),
+        ],
+    )
+
+
+import os
+import uuid
+import weaviate
+from weaviate.connect import ConnectionParams
+
+class WeaviateDriver:
+    def __init__(self):
+        weaviate_url = os.environ.get("WEAVIATE_URL", "http://rag-weaviate:8080")
+
+        self.client = weaviate.WeaviateClient(
+            connection_params=ConnectionParams.from_url(
+                weaviate_url,
+                grpc_port=50051,
+            )
+        )
+        self.client.connect()
+
+        self.collection = self.client.collections.get("PolicyChunks")
+
+    def close(self):
+        self.client.close()
+
+    def insert_vector(self, *, vector, properties) -> str:
+        wid = str(uuid.uuid4())
+        self.collection.data.insert(
+            uuid=wid,
+            vector=vector,
+            properties=properties,
+        )
+        return wid
+
+    def semantic_search(self, vector, limit=10, filters=None):
+        return self.collection.query.near_vector(
+            near_vector=vector,
+            limit=limit,
+            filters=filters,
+            return_metadata=["distance"],
+        )
+
+
+
 from typing import List
 from app.rag.models import Chunk
 
