@@ -1,3 +1,12 @@
+
+def safe_text(el, default="Not specified"):
+    if el is None:
+        return default
+    if el.text is None:
+        return default
+    return el.text.strip()
+
+
 def build_chunk_text(prtn: ET.Element) -> str:
     index = prtn.attrib.get("index")
     profile = prtn.attrib.get("profile")
