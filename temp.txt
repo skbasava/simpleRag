@@ -1,4 +1,73 @@
 
+rag-system/
+├── docker-compose.yml
+├── Dockerfile
+├── requirements.txt
+├── README.md
+│
+├── app/
+│   ├── __init__.py
+│
+│   ├── main.py                     # FastAPI entrypoint (uvicorn.run)
+│   ├── api.py                      # /query endpoint, FastAPI app
+│   ├── chainlit_app.py             # Chainlit UI client
+│
+│   ├── ingest.py                   # Job-based ingestion runner
+│
+│   ├── config/
+│   │   ├── __init__.py
+│   │   └── settings.py             # env vars (PG_DSN, WEAVIATE_URL)
+│
+│   ├── db/
+│   │   ├── __init__.py
+│   │   ├── postgres.py             # pgConnect + helpers
+│   │   ├── weaviate.py              # WeaviateClient wrapper
+│   │   └── weaviate_schema.py       # ensure_schema()
+│
+│   ├── ingestion/
+│   │   ├── __init__.py
+│   │   ├── state_machine.py         # ingest_one_file(), ingest_chunks()
+│   │   ├── progress_repo.py         # ingestion_progress table access
+│   │   ├── xml_parser.py            # XML → chunks
+│   │   └── chunk_writer.py          # insert chunk (pg + weaviate)
+│
+│   ├── rag/
+│   │   ├── __init__.py
+│   │   ├── models.py                # Chunk dataclass
+│   │   ├── router.py                # structured + semantic merge
+│   │   ├── service.py               # RAGService.answer()
+│   │   ├── structured_search.py     # Postgres search
+│   │   ├── semantic_search.py       # Weaviate search
+│   │   ├── chunk_merger.py           # dedupe + merge
+│   │   ├── context_resolver.py      # project/version detection
+│   │   └── prompt_builder.py        # final prompt creation
+│
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   └── retry.py                 # exponential backoff + jitter
+│
+│   ├── metrics/
+│   │   ├── __init__.py
+│   │   └── retry_metrics.py         # retry stats
+│
+│   └── db_schema/
+│       └── schema.sql               # Postgres tables (policy_chunks, ingestion_progress)
+│
+├── tests/
+│   ├── __init__.py
+│   ├── test_ingestion_resume.py
+│   ├── test_router.py
+│   └── test_context_resolver.py
+│
+└── data/
+    └── xml/
+        ├── ProjectA/
+        │   └── policy_v1.xml
+        └── ProjectB/
+            └── policy_v3.xml
+
+
+
 CREATE TABLE IF NOT EXISTS ingestion_progress (
     xml_path TEXT PRIMARY KEY,
     status TEXT NOT NULL CHECK (status IN ('PENDING','IN_PROGRESS','DONE','FAILED')),
