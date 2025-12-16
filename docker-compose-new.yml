@@ -1,0 +1,92 @@
+version: "3.9"
+
+networks:
+  rag-net:
+    driver: bridge
+
+volumes:
+  pg_data:
+  weaviate_data:
+
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: rag-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ragdb
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ragpassword
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d ragdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  weaviate:
+    image: semitechnologies/weaviate:1.25.4
+    container_name: rag-weaviate
+    restart: unless-stopped
+    environment:
+      QUERY_DEFAULTS_LIMIT: "25"
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: "none"   # IMPORTANT
+      ENABLE_MODULES: ""                  # disable text2vec
+      CLUSTER_HOSTNAME: "node1"
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    ports:
+      - "8080:8080"
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/v1/.well-known/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rag-ingestion:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-ingestion
+    restart: "no"               # IMPORTANT: ingestion is a JOB, not a service
+    command: ["python", "-m", "app.ingest"]
+    environment:
+      PYTHONPATH: /app
+      PG_DSN: postgresql://raguser:ragpassword@postgres:5432/ragdb
+      WEAVIATE_URL: http://weaviate:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      weaviate:
+        condition: service_healthy
+    networks:
+      - rag-net
+
+  rag-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-api
+    restart: unless-stopped
+    command: ["python", "-m", "app.main"]
+    environment:
+      PYTHONPATH: /app
+      PG_DSN: postgresql://raguser:ragpassword@postgres:5432/ragdb
+      WEAVIATE_URL: http://weaviate:8080
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      weaviate:
+        condition: service_healthy
+    networks:
+      - rag-net
