@@ -1,0 +1,33 @@
+# app/ingestion/models.py
+from dataclasses import dataclass
+from typing import Optional, List
+
+@dataclass
+class PolicyChunkRecord:
+    # identity
+    chunk_id: Optional[int]      # DB-generated
+    project: str
+    mpu_name: str
+    rg_index: int
+    profile: str
+
+    # address range
+    start_hex: str
+    end_hex: str
+    start_dec: int
+    end_dec: int
+
+    # access domains
+    rdomains: List[str]
+    wdomains: List[str]
+
+    # chunking
+    chunk_index: int
+    chunk_text: str
+
+    # dedup / resume
+    identity_hash: str
+    content_hash: str
+
+    # vector linkage
+    vector_id: Optional[str]
