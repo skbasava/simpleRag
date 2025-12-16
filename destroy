@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+COMPOSE="docker compose"
+
+echo "======================================"
+echo "🚀 Building FULL RAG system"
+echo "======================================"
+
+$COMPOSE down --remove-orphans
+$COMPOSE build
+
+$COMPOSE up -d postgres weaviate
+sleep 2
+
+$COMPOSE up --abort-on-container-exit rag-ingestion
+$COMPOSE up -d rag-api chainlit
+
+echo "✅ Full system is running"
