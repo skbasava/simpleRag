@@ -1,6 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+  echo "Usage: ./build-service.sh <service-name>"
+  exit 1
+fi
+
+SERVICE=$1
+COMPOSE="docker compose"
+
+echo "======================================"
+echo "🔨 Building service: $SERVICE"
+echo "======================================"
+
+# Build only the requested service
+$COMPOSE build "$SERVICE"
+
+# Start dependencies automatically
+echo "▶️  Starting $SERVICE..."
+$COMPOSE up -d "$SERVICE"
+
+echo "✅ Service '$SERVICE' is up"
+
+
+
+
+
 echo "======================================"
 echo "🚀 Building RAG system"
 echo "======================================"
