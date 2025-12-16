@@ -1,4 +1,34 @@
 
+
+
+def wv_obj_to_chunk(obj, score: float) -> Chunk:
+    return Chunk(
+        chunk_id=int(obj.properties["chunk_id"]),
+        project=obj.properties["project"],
+        mpu_name=obj.properties["mpu_name"],
+        rg_index=obj.properties["rg_index"],
+        profile=obj.properties["profile"],
+        start_hex=obj.properties["start_hex"],
+        end_hex=obj.properties["end_hex"],
+        chunk_text=obj.properties["chunk_text"],
+        source="weaviate",
+        score=score,
+     )
+def pg_row_to_chunk(row) -> Chunk:
+    return Chunk(
+        chunk_id=row["id"],
+        project=row["project"],
+        mpu_name=row["mpu_name"],
+        rg_index=row["rg_index"],
+        profile=row["profile"],
+        start_hex=row["start_hex"],
+        end_hex=row["end_hex"],
+        chunk_text=row["chunk_text"],
+        source="postgres",
+        score=None,
+    )
+
+
 import os
 from dataclasses import dataclass
 
