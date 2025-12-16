@@ -1,3 +1,34 @@
+def build_chunk_text(prtn: ET.Element) -> str:
+    index = prtn.attrib.get("index")
+    profile = prtn.attrib.get("profile")
+    start = prtn.attrib.get("start")
+    end = prtn.attrib.get("end")
+
+    rdomains = prtn.attrib.get("rdomains") or "no domains specified"
+    wdomains = prtn.attrib.get("wdomains") or "no domains specified"
+
+    rationale_el = prtn.find("SecurityRationale")
+    rationale = rationale_el.text.strip() if rationale_el is not None else "No rationale provided"
+
+    poc_el = prtn.find("SecurityRationalePoC")
+    poc = poc_el.text.strip() if poc_el is not None else "Not specified"
+
+    flags = prtn.find("XPU_Rgn_FLAGS")
+    enabled = flags.attrib.get("enabled") if flags is not None else "unknown"
+    static = flags.attrib.get("static") if flags is not None else "unknown"
+
+    return (
+        f"MPU region {index} for profile {profile} protects address range {start} to {end}. "
+        f"The region is {'enabled' if enabled == 'true' else 'disabled'} and "
+        f"{'static' if static == 'true' else 'dynamic'}. "
+        f"Read access is allowed for {rdomains}. "
+        f"Write access is allowed for {wdomains}. "
+        f"Security rationale: {rationale}. "
+        f"Proof of ownership: {poc}."
+    )
+
+
+
 
 from weaviate.classes.config import (
     Configure,
