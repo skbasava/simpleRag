@@ -1,3 +1,28 @@
+from pydantic import BaseModel
+from typing import List
+
+
+class QueryRequest(BaseModel):
+    query: str
+    project: str
+    version: str
+
+
+class SourceChunk(BaseModel):
+    mpu_name: str
+    rg_index: int
+    profile: str
+    start_hex: str
+    end_hex: str
+
+
+class QueryResponse(BaseModel):
+    answer: str
+    confidence: float
+    sources: List[SourceChunk]
+
+
+
 # app/rag/service.py
 
 from typing import List, Dict
