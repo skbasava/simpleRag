@@ -1,3 +1,24 @@
+
+from rag.models import RetrievedChunk
+
+def fetch_chunks(pg, vector_hits, project=None, version=None):
+    rows = pg.fetch(...)
+    return [
+        RetrievedChunk(
+            chunk_text=r.chunk_text,
+            project=r.project,
+            version=r.version,
+            profile=r.profile,
+            mpu_name=r.mpu_name,
+            rg_index=r.rg_index,
+            chunk_index=r.chunk_index,
+            score=hit.score,
+        )
+        for r, hit in rows
+    ]
+
+
+
 from typing import List
 from app.rag.models import Chunk
 
