@@ -1,0 +1,159 @@
+<PolicyExamples>
+  <Version>5.3</Version>
+
+  <!-- ========================================================= -->
+  <!-- POSITIVE EXAMPLES (EXPECTED / VALID PATTERNS)             -->
+  <!-- ========================================================= -->
+
+  <MPU name="AOPSS_MPU_XPU4" fqname="KAANAPALI.AOPSS_MPU_XPU4">
+
+    <PRTn
+      index="1"
+      profile="TME_FW"
+      start="0x69320000"
+      end="0x6932C000"
+      rdomains=""
+      wdomains=""
+      example_type="positive"
+    >
+      <XPU_Rgn_FLAGS enabled="true" static="false"/>
+
+      <SecurityRationale>
+        TME_FW uses dynamic policy regions to lock firmware memory
+        during runtime to protect sensitive operations.
+      </SecurityRationale>
+
+      <SecurityRationalePoC>
+        TME-FW-OWNERS
+      </SecurityRationalePoC>
+    </PRTn>
+
+    <PRTn
+      index="2"
+      profile="xBL_SC"
+      start="0x70000000"
+      end="0x7000FFFF"
+      rdomains=""
+      wdomains=""
+      example_type="positive"
+    >
+      <XPU_Rgn_FLAGS enabled="true" static="false"/>
+
+      <SecurityRationale>
+        xBL_SC downloads and authenticates boot images
+        before execution during early boot.
+      </SecurityRationale>
+
+      <SecurityRationalePoC>
+        BOOT-SECURITY
+      </SecurityRationalePoC>
+    </PRTn>
+
+  </MPU>
+
+  <MPU name="IPA_MPU" fqname="KAANAPALI.IPA_MPU">
+
+    <PRTn
+      index="15"
+      profile="MSA"
+      start="0x0"
+      end="0xFFFFFFFF"
+      rdomains=""
+      wdomains=""
+      example_type="positive"
+    >
+      <XPU_Rgn_FLAGS enabled="true" static="false"/>
+
+      <SecurityRationale>
+        MSA profile spans the full addressable range
+        to enforce ownership and blanket protection.
+      </SecurityRationale>
+
+      <SecurityRationalePoC>
+        PLATFORM-SECURITY
+      </SecurityRationalePoC>
+    </PRTn>
+
+  </MPU>
+
+  <!-- ========================================================= -->
+  <!-- NEGATIVE EXAMPLES (ANTI-PATTERNS / VIOLATIONS)            -->
+  <!-- ========================================================= -->
+
+  <MPU name="ANOC_IPA_XPU" fqname="KAANAPALI.ANOC_IPA_XPU">
+
+    <PRTn
+      index="0"
+      profile="MSA"
+      start="0xFFFFFFFF"
+      end="0xFFFFFFFF"
+      rdomains=""
+      wdomains=""
+      example_type="negative"
+    >
+      <XPU_Rgn_FLAGS enabled="true" static="true"/>
+
+      <SecurityRationale>
+        ANOC_IPA_XPU should not have a static policy region.
+        Static policy on IPA MPU violates access control guidelines.
+      </SecurityRationale>
+
+      <SecurityRationalePoC>
+        SECACCESS-4240
+      </SecurityRationalePoC>
+    </PRTn>
+
+  </MPU>
+
+  <MPU name="eNPU1_NoC" fqname="KAANAPALI.eNPU1_NoC">
+
+    <PRTn
+      index="39"
+      profile="TME_FW"
+      start="0x69320000"
+      end="0x6932C000"
+      rdomains=""
+      wdomains=""
+      example_type="negative"
+    >
+      <XPU_Rgn_FLAGS enabled="true" static="false"/>
+
+      <SecurityRationale>
+        Insufficient region slots were available.
+        Policy was collapsed into an existing TME_FW region,
+        reducing isolation guarantees.
+      </SecurityRationale>
+
+      <SecurityRationalePoC>
+        RG-EXHAUSTION
+      </SecurityRationalePoC>
+    </PRTn>
+
+  </MPU>
+
+  <MPU name="DEBUG_MPU" fqname="KAANAPALI.DEBUG_MPU">
+
+    <PRTn
+      index="3"
+      profile="DEBUG"
+      start="0x80000000"
+      end="0x8FFFFFFF"
+      rdomains=""
+      wdomains=""
+      example_type="negative"
+    >
+      <XPU_Rgn_FLAGS enabled="true" static="true"/>
+
+      <SecurityRationale>
+        Debug profile with static policy exposes sensitive memory
+        and should never be enabled in production builds.
+      </SecurityRationale>
+
+      <SecurityRationalePoC>
+        DEBUG-LEAK
+      </SecurityRationalePoC>
+    </PRTn>
+
+  </MPU>
+
+</PolicyExamples>
