@@ -1,3 +1,82 @@
+# app/rag/service.py
+
+from typing import List, Dict
+from app.rag.models import Chunk
+from rag.models import QueryResponse
+from app.rag.prompt_builder import PromptBuilder
+from app.rag.rank import HybridRanker
+from app.rag.kshot import KShotRewriter
+
+
+class RAGService:
+    def __init__(
+        self,
+        *,
+        semantic_searcher,
+        structured_searcher,
+        llm_client,
+        kshot: KShotRewriter,
+        prompt_builder: PromptBuilder,
+        ranker: HybridRanker,
+    ):
+        self.semantic = semantic_searcher
+        self.structured = structured_searcher
+        self.llm = llm_client
+        self.kshot = kshot
+        self.prompt_builder = prompt_builder
+        self.ranker = ranker
+
+    async def answer(self, query: str, filters: Dict) -> QueryResponse:
+        # 1️⃣ Rewrite query using K-shot
+        rewritten = self.kshot.rewrite(
+            query=query,
+            project=filters.get("project"),
+            version=filters.get("version"),
+        )
+
+        # 2️⃣ Semantic search → vector hits only
+        vector_hits = self.semantic.search_vector_hits(
+            rewritten,
+            limit=20,
+        )
+
+        # 3️⃣ Structured fetch using vector IDs + filters
+        chunks = self.structured.fetch_by_vector_hits(
+            vector_hits=vector_hits,
+            project=filters.get("project"),
+            version=filters.get("version"),
+        )
+
+        # 4️⃣ Fallback if SQL empty
+        if not chunks:
+            chunks = self.structured.fallback_latest(
+                project=filters.get("project"),
+                limit=10,
+            )
+
+        # 5️⃣ Hybrid ranking
+        ranked_chunks = self.ranker.rank(chunks, vector_hits)
+
+        # 6️⃣ Build prompt
+        prompt = self.prompt_builder.build(
+            user_query=query,
+            rewritten_query=rewritten,
+            chunks=ranked_chunks[:8],
+        )
+
+        # 7️⃣ Call LLM
+        answer = await self.llm.generate(prompt)
+
+        return QueryResponse(
+            answer=answer,
+            sources=ranked_chunks[:5],
+            confidence=self.ranker.confidence(ranked_chunks),
+        )
+
+
+
+
+
 class SemanticSearcher:
     def __init__(self, weaviate_client, embedder):
         self.wv = weaviate_client
