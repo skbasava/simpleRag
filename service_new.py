@@ -3,6 +3,20 @@ class RAGService:
         self.router = router
         self.context = context_resolver
 
+from rag.models import RAGAnswer
+
+def run_rag_pipeline(req):
+    rewritten = rewrite_with_kshot(req.query)
+    hits = semantic_search(...)
+    chunks = fetch_chunks(...)
+    answer = call_llm(...)
+
+    return RAGAnswer(
+        answer=answer,
+        citations=chunks
+    )
+    
+
     async def answer(self, query: str) -> dict:
         project, version, clarification = self.context.resolve(query)
 
