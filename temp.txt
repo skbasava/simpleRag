@@ -1,4 +1,74 @@
 
+from typing import List
+from app.rag.models import RetrievedChunk
+
+
+class StructuredSearcher:
+    def __init__(self, pg):
+        self.pg = pg
+
+    def fetch_chunks(
+        self,
+        vector_hits: list,
+        project: str,
+        version: str,
+        limit: int = 20,
+    ) -> List[RetrievedChunk]:
+        """
+        Fetch authoritative chunks from Postgres using
+        vector-derived candidate IDs.
+        """
+
+        chunk_ids = [h.chunk_id for h in vector_hits]
+
+        if not chunk_ids:
+            return []
+
+        sql = """
+        SELECT
+            id AS chunk_id,
+            project,
+            version,
+            mpu_name,
+            profile,
+            rg_index,
+            start_hex,
+            end_hex,
+            chunk_text
+        FROM policy_chunks
+        WHERE id = ANY(%(chunk_ids)s)
+          AND project = %(project)s
+          AND version = %(version)s
+        LIMIT %(limit)s
+        """
+
+        rows = self.pg.fetch(
+            sql,
+            {
+                "chunk_ids": chunk_ids,
+                "project": project,
+                "version": version,
+                "limit": limit,
+            },
+        )
+
+        return [
+            RetrievedChunk(
+                chunk_text=r["chunk_text"],
+                project=r["project"],
+                version=r["version"],
+                profile=r["profile"],
+                mpu_name=r["mpu_name"],
+                rg_index=r["rg_index"],
+                chunk_index=r["chunk_id"],
+                score=None,  # filled later
+            )
+            for r in rows
+        ]
+
+
+
+
 def safe_text(el, default="Not specified"):
     if el is None:
         return default
