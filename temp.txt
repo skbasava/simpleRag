@@ -1,4 +1,50 @@
 
+from fastapi import FastAPI
+from contextlib import asynccontextmanager
+
+from app.api.api import create_app
+from app.db.postgres import PostgresDriver
+from app.db.weaviate import WeaviateDriver
+from app.rag.service import RAGService
+from app.rag.router import RAGRouter
+from app.rag.prompt_builder import PromptBuilder
+from app.llm.qgenie import QGenieLLM
+from app.embeddings.qgenie import QGenieEmbedder
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ---- startup ----
+    pg = PostgresDriver()
+    wv = WeaviateDriver()
+    embedder = QGenieEmbedder()
+    llm = QGenieLLM()
+    prompt_builder = PromptBuilder()
+
+    rag_service = RAGService(
+        semantic_searcher=wv,
+        structured_searcher=pg,
+        llm_client=llm,
+        embedder=embedder,
+        prompt_builder=prompt_builder,
+    )
+
+    rag_router = RAGRouter(rag_service)
+
+    app.state.pg = pg
+    app.state.wv = wv
+    app.state.rag_router = rag_router
+
+    yield
+
+    # ---- shutdown ----
+    print("Shutting down resources...")
+    wv.close()          # ✅ THIS FIXES YOUR WARNING
+    pg.close()          # close pool
+    llm.close() if hasattr(llm, "close") else None
+
+
+
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
   -d '{
