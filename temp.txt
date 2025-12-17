@@ -1,6 +1,35 @@
 from pydantic import BaseModel
 from typing import List
 
+@dataclass(frozen=True)
+class Chunk:
+    """
+    Internal RAG domain model.
+    Represents an authoritative policy chunk used for reasoning.
+    """
+    chunk_id: int
+    project: str
+    version: str
+    mpu_name: str
+    rg_index: int
+    profile: str
+    start_hex: str
+    end_hex: str
+    chunk_text: str
+    source: str              # "postgres" | "weaviate"
+    score: Optional[float] = None
+
+class SourceChunk(BaseModel):
+    """
+    API-safe representation of a policy chunk.
+    This is intentionally a SUBSET of app.rag.models.Chunk.
+    """
+    chunk_id: int
+    mpu_name: str
+    rg_index: int
+    profile: str
+    start_hex: str
+    end_hex: str
 
 class QueryRequest(BaseModel):
     query: str
