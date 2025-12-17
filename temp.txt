@@ -1,4 +1,13 @@
 
+
+def close(self):
+        if hasattr(self.semantic, "close"):
+            self.semantic.close()      # Weaviate
+        if hasattr(self.structured, "close"):
+            self.structured.close()    # Postgres
+        if hasattr(self.llm, "close"):
+            self.llm.close() 
+
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
