@@ -1,3 +1,33 @@
+
+# ingest.py
+from chunk import Chunk
+from embedder import Embedder
+from pgvector_repo import PgVectorRepo
+import os
+
+PG_DSN = "postgresql://raguser:ragpassword@localhost:5432/ragdb"
+QGENIE_API_KEY = os.getenv("QGENIE_API_KEY")
+
+embedder = Embedder(QGENIE_API_KEY)
+repo = PgVectorRepo(PG_DSN)
+
+def ingest_chunk(project: str, version: str, text: str):
+    chunk = Chunk(
+        project=project,
+        version=version,
+        raw_text=text
+    )
+
+    chunk.compute_hash()
+    chunk.embedding = embedder.embed(chunk.raw_text)
+
+    repo.insert_chunk(chunk)
+
+    return chunk
+
+
+
+
 # pgvector_repo.py
 import psycopg2
 from psycopg2.extras import execute_values
