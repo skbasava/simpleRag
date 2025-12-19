@@ -1,4 +1,35 @@
+# debug.py
+from typing import List
+from chunk import Chunk
 
+
+def log_chunks(
+    chunks: List[Chunk],
+    *,
+    title: str = "Chunks",
+    max_chunks: int = 5,
+    max_text_len: int = 300,
+):
+    print(f"\n🔍 {title}")
+    print(f"Total chunks: {len(chunks)}")
+
+    for i, c in enumerate(chunks[:max_chunks]):
+        text_preview = c.raw_text[:max_text_len].replace("\n", " ")
+
+        print(
+            f"""
+--- Chunk {i + 1} ---
+id           : {c.id}
+project      : {c.project}
+version      : {c.version}
+hash         : {c.content_hash[:12]}...
+score        : {c.score}
+text_preview : {text_preview}{"..." if len(c.raw_text) > max_text_len else ""}
+"""
+        )
+
+    if len(chunks) > max_chunks:
+        print(f"... {len(chunks) - max_chunks} more chunks not shown\n")
 
 def close(self):
         if hasattr(self.semantic, "close"):
