@@ -1,3 +1,46 @@
+# pgvector_repo.py
+import psycopg2
+from psycopg2.extras import execute_values
+from chunk import Chunk
+
+class PgVectorRepo:
+    def __init__(self, dsn: str):
+        self.conn = psycopg2.connect(dsn)
+        self.conn.autocommit = True
+
+    def insert_chunk(self, chunk: Chunk):
+        sql = """
+        INSERT INTO xml_chunks (
+            project,
+            version,
+            raw_chunk_text,
+            chunk_hash,
+            embedding
+        )
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (chunk_hash) DO NOTHING
+        RETURNING id;
+        """
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                sql,
+                (
+                    chunk.project,
+                    chunk.version,
+                    chunk.raw_text,
+                    chunk.chunk_hash,
+                    chunk.embedding
+                )
+            )
+            row = cur.fetchone()
+            if row:
+                chunk.id = row[0]
+
+
+
+
+
 # debug.py
 from typing import List
 from chunk import Chunk
