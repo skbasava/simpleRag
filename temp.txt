@@ -1,4 +1,55 @@
 
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: rag-pgvector
+    environment:
+      POSTGRES_DB: ragdb
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ragpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d ragdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  validator:
+    build:
+      context: ./validator
+    container_name: pgvector-validator
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ragdb
+      DB_USER: raguser
+      DB_PASSWORD: ragpassword
+    command: ["python", "validate_pgvector.py"]
+
+
+DB_CONFIG = {
+    "host": os.getenv("DB_HOST", "postgres"),
+    "port": int(os.getenv("DB_PORT", 5432)),
+    "dbname": os.getenv("DB_NAME", "ragdb"),
+    "user": os.getenv("DB_USER", "raguser"),
+    "password": os.getenv("DB_PASSWORD", "ragpassword"),
+}
+
+
+
+volumes:
+  pg_data:
+
+
 # ingest.py
 from chunk import Chunk
 from embedder import Embedder
