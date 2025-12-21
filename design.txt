@@ -1,3 +1,81 @@
+
+from typing import Dict, Tuple, Any
+
+
+class SQLQueryBuilder:
+    """
+    Builds SQL + params from structured filters.
+    No implicit behavior.
+    """
+
+    def build(
+        self,
+        *,
+        vector_search: bool,
+        filters: Dict[str, Any],
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Returns (sql, params)
+        """
+
+        params = {}
+        where_clauses = []
+
+        if "project" in filters:
+            where_clauses.append("project = ANY(%(projects)s)")
+            params["projects"] = filters["project"]
+
+        if "version" in filters:
+            where_clauses.append("version = ANY(%(versions)s)")
+            params["versions"] = filters["version"]
+
+        base_where = ""
+        if where_clauses:
+            base_where = "WHERE " + " AND ".join(where_clauses)
+
+        # ---- latest version logic (PER PROJECT) ----
+        if filters.get("latest_only"):
+            sql = f"""
+WITH latest_versions AS (
+    SELECT project, MAX(version) AS max_version
+    FROM xml_chunks
+    {base_where}
+    GROUP BY project
+)
+SELECT
+    x.id,
+    x.project,
+    x.version,
+    x.raw_chunk_text,
+    x.embedding <-> %(query_vector)s AS distance
+FROM xml_chunks x
+JOIN latest_versions lv
+  ON x.project = lv.project
+ AND x.version = lv.max_version
+ORDER BY distance
+LIMIT %(limit)s
+"""
+        else:
+            sql = f"""
+SELECT
+    id,
+    project,
+    version,
+    raw_chunk_text,
+    embedding <-> %(query_vector)s AS distance
+FROM xml_chunks
+{base_where}
+ORDER BY distance
+LIMIT %(limit)s
+"""
+
+        return sql, params
+
+
+
+
+
+
 class HydeLiteRewriter:
     """
     Safe HyDE-lite rewriter.
