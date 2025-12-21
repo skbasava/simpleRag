@@ -1,3 +1,33 @@
+ADDRESS_RANGE_RE = re.compile(
+    r"(0x[0-9A-Fa-f]+)\s*-\s*(0x[0-9A-Fa-f]+)"
+)
+
+ADDRESS_SINGLE_RE = re.compile(
+    r"(0x[0-9A-Fa-f]+)"
+)
+
+def extract_address(text: str) -> tuple[int | None, int | None]:
+    if not text:
+        return None, None
+
+    # 1️⃣ Range match first
+    m = ADDRESS_RANGE_RE.search(text)
+    if m:
+        start = int(m.group(1), 16)
+        end   = int(m.group(2), 16)
+        return start, end
+
+    # 2️⃣ Single address
+    m = ADDRESS_SINGLE_RE.search(text)
+    if m:
+        addr = int(m.group(1), 16)
+        return addr, addr
+
+    # 3️⃣ No address mentioned
+    return None, None
+
+
+
 
 -- Drop vector + chunk tables explicitly
 
