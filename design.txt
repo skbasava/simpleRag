@@ -1,0 +1,9 @@
+ADDRESS_RANGE_RE = re.compile(
+    r"(0x[0-9A-Fa-f]+)\s*-\s*(0x[0-9A-Fa-f]+)"
+)
+
+def extract_address_range(text: str):
+    m = ADDRESS_RANGE_RE.search(text)
+    if not m:
+        return None, None
+    return m.group(1), m.group(2)
