@@ -1,3 +1,62 @@
+
+-- Drop vector + chunk tables explicitly
+
+DROP TABLE IF EXISTS xml_chunks CASCADE;
+DROP TABLE IF EXISTS ingestion_progress CASCADE;
+
+-- If you created auxiliary tables
+DROP TABLE IF EXISTS rag_jobs CASCADE;
+DROP TABLE IF EXISTS rag_logs CASCADE;
+
+
+#!/usr/bin/env bash
+set -e
+
+echo "=============================="
+echo "RAG SYSTEM – FULL CLEAN & REBUILD"
+echo "=============================="
+
+echo ""
+echo "🔻 Step 1: Stop containers"
+docker compose down --remove-orphans
+
+echo ""
+echo "🗑️  Step 2: Remove volumes (Postgres data)"
+docker compose down -v
+
+echo ""
+echo "🌐 Step 3: Remove project networks"
+docker network prune -f
+
+echo ""
+echo "🧹 Step 4: Remove dangling images"
+docker image prune -f
+
+echo ""
+echo "🔨 Step 5: Rebuild images (no cache)"
+docker compose build --no-cache
+
+echo ""
+echo "🚀 Step 6: Start Postgres only"
+docker compose up -d postgres
+
+echo "⏳ Waiting for Postgres to be ready..."
+sleep 8
+
+echo ""
+echo "🧨 Step 7: Drop Postgres tables"
+docker compose exec -T postgres \
+  psql -U postgres -d ragdb -f /cleanup_postgres.sql
+
+echo ""
+echo "🚀 Step 8: Start all services"
+docker compose up -d
+
+echo ""
+echo "✅ Rebuild complete"
+docker compose ps
+
+
 ADDRESS_RANGE_RE = re.compile(
     r"(0x[0-9A-Fa-f]+)\s*-\s*(0x[0-9A-Fa-f]+)"
 )
