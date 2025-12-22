@@ -1,3 +1,41 @@
+filters = {
+    "candidate_chunk_ids": [12, 47, 103, 208],
+    "project": "KAANAPALLI",
+    "version": "latest",
+    "mpu_name": None,
+    "region": None,
+    "query_address": 0xC210000,
+}
+
+output expected 
+
+SELECT ...
+FROM policy_chunks
+WHERE id = ANY(%(candidate_chunk_ids)s)
+  AND project = %(project)s
+  AND version = (
+        SELECT MAX(version)
+        FROM policy_chunks
+        WHERE project = %(project)s
+  )
+  AND addr_start <= %(query_address)s
+  AND addr_end >= %(query_address)s
+
+{
+  "candidate_chunk_ids": [12, 47, 103, 208],
+  "project": "KAANAPALLI",
+  "query_address": 0xC210000
+}
+
+
+
+
+
+
+
+
+
+
 def build_policy_sql(filters: dict) -> tuple[str, dict]:
     """
     Build a safe, parameterized SQL query for policy retrieval.
