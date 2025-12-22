@@ -1,3 +1,48 @@
+def build_chunk_text(
+    *,
+    project: str | None,
+    version: str | None,
+    mpu_name: str | None,
+    region_index: int | None,
+    addr_start: int | None,
+    addr_end: int | None,
+    policy_text: str,
+) -> str:
+    """
+    Build embedding-optimized chunk text with structured metadata labels.
+
+    This text is ONLY for embedding + vector search.
+    """
+
+    labels = []
+
+    if project:
+        labels.append(f"[PROJECT={project}]")
+
+    if version:
+        labels.append(f"[VERSION={version}]")
+
+    if mpu_name:
+        labels.append(f"[MPU={mpu_name}]")
+
+    if region_index is not None:
+        labels.append(f"[REGION={region_index}]")
+
+    if addr_start is not None:
+        labels.append(f"[ADDR_START=0x{addr_start:X}]")
+
+    if addr_end is not None:
+        labels.append(f"[ADDR_END=0x{addr_end:X}]")
+
+    # ---- final chunk text ----
+    # metadata first, policy content second
+    chunk_text = "\n".join(labels)
+    chunk_text += "\n\n"
+    chunk_text += policy_text.strip()
+
+    return chunk_text
+
+
 
 You are a technical query rewriter for a retrieval system.
 
