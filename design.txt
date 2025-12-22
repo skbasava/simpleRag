@@ -1,3 +1,123 @@
+
+import re
+from typing import Optional
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class QueryFacts:
+    project: Optional[str] = None
+    version: Optional[str] = None
+    addr: Optional[int] = None
+    mpu: Optional[str] = None
+
+
+# --- regex ---
+HEX_ADDR_RE = re.compile(r"0x[0-9a-fA-F]+")
+VERSION_RE = re.compile(r"\b(\d+\.\d+)\b")
+PROJECT_RE = re.compile(r"\b(KAANAPALLI|HAWI|WAIPIO|KAILUA)\b", re.I)
+MPU_RE = re.compile(r"\b[A-Z0-9_]+_MPU_[A-Z0-9_]+\b", re.I)
+
+
+def extract_query_facts(user_query: str) -> QueryFacts:
+    text = user_query.upper()
+
+    # Address
+    addr = None
+    m = HEX_ADDR_RE.search(text)
+    if m:
+        addr = int(m.group(), 16)
+
+    # Version
+    version = None
+    m = VERSION_RE.search(text)
+    if m:
+        version = m.group(1)
+
+    # Project
+    project = None
+    m = PROJECT_RE.search(text)
+    if m:
+        project = m.group(1)
+
+    # MPU
+    mpu = None
+    m = MPU_RE.search(text)
+    if m:
+        mpu = m.group()
+
+    return QueryFacts(
+        project=project,
+        version=version,
+        addr=addr,
+        mpu=mpu,
+    )
+
+def generate_hyde_text(
+    user_query: str,
+    facts: QueryFacts,
+    llm,
+) -> str:
+    """
+    Generate HyDE-style technical rewrite for embedding only.
+    Output is NOT used for SQL.
+    """
+
+    system_prompt = """
+You rewrite user questions into precise technical search statements.
+
+Rules:
+- Do NOT invent MPU names, addresses, or permissions
+- Use only provided facts
+- Write in neutral, technical language
+- One paragraph only
+"""
+
+    constraints = []
+
+    if facts.project:
+        constraints.append(f"Project: {facts.project}")
+    if facts.version:
+        constraints.append(f"Version: {facts.version}")
+    if facts.mpu:
+        constraints.append(f"MPU: {facts.mpu}")
+    if facts.addr is not None:
+        constraints.append(f"Address: 0x{facts.addr:X}")
+
+    constraint_text = "\n".join(constraints)
+
+    user_prompt = f"""
+Original query:
+{user_query}
+
+Known facts:
+{constraint_text}
+
+Rewrite as a technical statement describing the MPU access-control policy being queried.
+"""
+
+    rewritten = llm.ask(
+        prompt=user_prompt,
+        system_prompt=system_prompt,
+        temperature=0.0,   # critical: no creativity
+        max_tokens=120,
+    )
+
+    return rewritten.strip()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def build_chunk_text(
     *,
     project: str | None,
