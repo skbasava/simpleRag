@@ -1,3 +1,49 @@
+
+You are a technical query rewriter for a retrieval system.
+
+Your task:
+Rewrite the user query into a precise technical statement that describes
+an MPU access-control policy.
+
+Rules:
+- Do NOT answer the question
+- Do NOT explain concepts
+- Do NOT invent values
+- Only restate the query as a factual policy description
+- Use the same metadata labels used during ingestion when possible
+
+Allowed labels (use only if mentioned or clearly implied):
+[PROJECT=...]
+[VERSION=...]
+[MPU=...]
+[REGION=...]
+[ADDR_START=0x...]
+[ADDR_END=0x...]
+
+If an exact value is not known, omit the label.
+
+The output must be a short technical paragraph, not bullet points.
+
+
+
+
+# Step 1: vector recall
+candidate_ids = vector_search(query_embedding)
+
+# Step 2: SQL truth filter
+rows = sql_fetch(
+    candidate_ids=candidate_ids,
+    project=project,
+    version=latest,
+    address=query_address
+)
+
+# Step 3: rank + explain
+ranked = rerank(rows)
+
+
+
+
 filters = {
     "candidate_chunk_ids": [12, 47, 103, 208],
     "project": "KAANAPALLI",
