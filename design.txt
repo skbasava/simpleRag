@@ -1,231 +1,76 @@
-
-from typing import Dict, Tuple, Any
-
-
-class SQLQueryBuilder:
+def build_policy_sql(filters: dict) -> tuple[str, dict]:
     """
-    Builds SQL + params from structured filters.
-    No implicit behavior.
-    """
+    Build a safe, parameterized SQL query for policy retrieval.
 
-    def build(
-        self,
-        *,
-        vector_search: bool,
-        filters: Dict[str, Any],
-    ) -> Tuple[str, Dict[str, Any]]:
-        """
-        Returns (sql, params)
-        """
+    Expected filters keys:
+      - candidate_chunk_ids: list[int] (REQUIRED)
+      - project: str | None
+      - version: str | "latest" | None
+      - mpu_name: str | None
+      - region: int | None
+      - query_address: int | None
 
-        params = {}
-        where_clauses = []
-
-        if "project" in filters:
-            where_clauses.append("project = ANY(%(projects)s)")
-            params["projects"] = filters["project"]
-
-        if "version" in filters:
-            where_clauses.append("version = ANY(%(versions)s)")
-            params["versions"] = filters["version"]
-
-        base_where = ""
-        if where_clauses:
-            base_where = "WHERE " + " AND ".join(where_clauses)
-
-        # ---- latest version logic (PER PROJECT) ----
-        if filters.get("latest_only"):
-            sql = f"""
-WITH latest_versions AS (
-    SELECT project, MAX(version) AS max_version
-    FROM xml_chunks
-    {base_where}
-    GROUP BY project
-)
-SELECT
-    x.id,
-    x.project,
-    x.version,
-    x.raw_chunk_text,
-    x.embedding <-> %(query_vector)s AS distance
-FROM xml_chunks x
-JOIN latest_versions lv
-  ON x.project = lv.project
- AND x.version = lv.max_version
-ORDER BY distance
-LIMIT %(limit)s
-"""
-        else:
-            sql = f"""
-SELECT
-    id,
-    project,
-    version,
-    raw_chunk_text,
-    embedding <-> %(query_vector)s AS distance
-FROM xml_chunks
-{base_where}
-ORDER BY distance
-LIMIT %(limit)s
-"""
-
-        return sql, params
-
-
-
-
-
-
-class HydeLiteRewriter:
-    """
-    Safe HyDE-lite rewriter.
-    Only rewrites semantic intent for vector embedding.
+    Returns:
+      (sql_query, sql_params)
     """
 
-    SYSTEM_PROMPT = (
-        "You rewrite user queries ONLY to improve semantic search.\n"
-        "Rules:\n"
-        "- Do NOT add facts\n"
-        "- Do NOT add project names\n"
-        "- Do NOT add versions\n"
-        "- Do NOT assume latest or specific values\n"
-        "- Keep under 2 sentences\n"
-        "- Output plain text only\n"
-    )
+    if not filters.get("candidate_chunk_ids"):
+        raise ValueError("candidate_chunk_ids is required for SQL filtering")
 
-    def __init__(self, llm_client, enabled: bool = True):
-        self.llm = llm_client
-        self.enabled = enabled
+    where_clauses = []
+    params = {}
 
-    def rewrite(self, semantic_query: str) -> str:
-        if not self.enabled:
-            return semantic_query
+    # --- Candidate gating (mandatory) ---
+    where_clauses.append("id = ANY(%(candidate_chunk_ids)s)")
+    params["candidate_chunk_ids"] = filters["candidate_chunk_ids"]
 
-        prompt = f"""
-Rewrite the following query to focus only on semantic meaning.
+    # --- Project ---
+    if filters.get("project"):
+        where_clauses.append("project = %(project)s")
+        params["project"] = filters["project"]
 
-Query:
-"{semantic_query}"
-"""
+    # --- Version ---
+    version = filters.get("version")
+    if version and version != "latest":
+        where_clauses.append("version = %(version)s")
+        params["version"] = version
+    elif version == "latest":
+        where_clauses.append(
+            "version = (SELECT MAX(version) FROM policy_chunks WHERE project = %(project)s)"
+        )
+        params["project"] = filters.get("project")
 
-        try:
-            rewritten = self.llm.complete(
-                system_prompt=self.SYSTEM_PROMPT,
-                user_prompt=prompt,
-                max_tokens=80,
-                temperature=0.2,
-            )
+    # --- MPU ---
+    if filters.get("mpu_name"):
+        where_clauses.append("mpu_name = %(mpu_name)s")
+        params["mpu_name"] = filters["mpu_name"]
 
-            text = rewritten.strip()
-            if not text:
-                return semantic_query
+    # --- Region ---
+    if filters.get("region") is not None:
+        where_clauses.append("rg_index = %(region)s")
+        params["region"] = filters["region"]
 
-            return text
+    # --- Address containment ---
+    if filters.get("query_address") is not None:
+        where_clauses.append(
+            "(addr_start <= %(query_address)s AND addr_end >= %(query_address)s)"
+        )
+        params["query_address"] = filters["query_address"]
 
-        except Exception:
-            # Hard safety fallback
-            return semantic_query
+    # --- Final SQL ---
+    sql = f"""
+        SELECT
+            id,
+            project,
+            version,
+            mpu_name,
+            rg_index,
+            addr_start,
+            addr_end,
+            raw_text,
+            embedding
+        FROM policy_chunks
+        WHERE {" AND ".join(where_clauses)}
+    """
 
-
-
-
-
-
-ADDRESS_RANGE_RE = re.compile(
-    r"(0x[0-9A-Fa-f]+)\s*-\s*(0x[0-9A-Fa-f]+)"
-)
-
-ADDRESS_SINGLE_RE = re.compile(
-    r"(0x[0-9A-Fa-f]+)"
-)
-
-def extract_address(text: str) -> tuple[int | None, int | None]:
-    if not text:
-        return None, None
-
-    # 1️⃣ Range match first
-    m = ADDRESS_RANGE_RE.search(text)
-    if m:
-        start = int(m.group(1), 16)
-        end   = int(m.group(2), 16)
-        return start, end
-
-    # 2️⃣ Single address
-    m = ADDRESS_SINGLE_RE.search(text)
-    if m:
-        addr = int(m.group(1), 16)
-        return addr, addr
-
-    # 3️⃣ No address mentioned
-    return None, None
-
-
-
-
--- Drop vector + chunk tables explicitly
-
-DROP TABLE IF EXISTS xml_chunks CASCADE;
-DROP TABLE IF EXISTS ingestion_progress CASCADE;
-
--- If you created auxiliary tables
-DROP TABLE IF EXISTS rag_jobs CASCADE;
-DROP TABLE IF EXISTS rag_logs CASCADE;
-
-
-#!/usr/bin/env bash
-set -e
-
-echo "=============================="
-echo "RAG SYSTEM – FULL CLEAN & REBUILD"
-echo "=============================="
-
-echo ""
-echo "🔻 Step 1: Stop containers"
-docker compose down --remove-orphans
-
-echo ""
-echo "🗑️  Step 2: Remove volumes (Postgres data)"
-docker compose down -v
-
-echo ""
-echo "🌐 Step 3: Remove project networks"
-docker network prune -f
-
-echo ""
-echo "🧹 Step 4: Remove dangling images"
-docker image prune -f
-
-echo ""
-echo "🔨 Step 5: Rebuild images (no cache)"
-docker compose build --no-cache
-
-echo ""
-echo "🚀 Step 6: Start Postgres only"
-docker compose up -d postgres
-
-echo "⏳ Waiting for Postgres to be ready..."
-sleep 8
-
-echo ""
-echo "🧨 Step 7: Drop Postgres tables"
-docker compose exec -T postgres \
-  psql -U postgres -d ragdb -f /cleanup_postgres.sql
-
-echo ""
-echo "🚀 Step 8: Start all services"
-docker compose up -d
-
-echo ""
-echo "✅ Rebuild complete"
-docker compose ps
-
-
-ADDRESS_RANGE_RE = re.compile(
-    r"(0x[0-9A-Fa-f]+)\s*-\s*(0x[0-9A-Fa-f]+)"
-)
-
-def extract_address_range(text: str):
-    m = ADDRESS_RANGE_RE.search(text)
-    if not m:
-        return None, None
-    return m.group(1), m.group(2)
+    return sql.strip(), params
