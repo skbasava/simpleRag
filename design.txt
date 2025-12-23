@@ -1,3 +1,68 @@
+User Query
+   ↓
+HyDE rewrite (natural language intent)
+   ↓
+STRUCTURED FACT EXTRACTION  ✅  ← instructor
+   ↓
+SQL filter + vector search
+
+from typing import Optional, List
+from pydantic import BaseModel, Field
+
+class PolicyQuery(BaseModel):
+    project: Optional[str] = Field(None, description="SoC / platform name")
+    version: Optional[str] = Field(None, description="Platform version")
+    mpu_name: Optional[str] = Field(None, description="MPU name")
+
+    addr_start: Optional[int] = Field(None, description="Hex address start")
+    addr_end: Optional[int] = Field(None, description="Hex address end")
+
+    read_domains: Optional[List[str]] = None
+    write_domains: Optional[List[str]] = None
+
+    profile: Optional[str] = None
+
+import instructor
+from openai import OpenAI
+
+client = instructor.from_openai(OpenAI())
+
+def extract_query_facts(user_query: str, hyde_text: str) -> PolicyQuery:
+    return client.chat.completions.create(
+        model="gpt-4o-mini",
+        response_model=PolicyQuery,
+        temperature=0,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Extract MPU access-control query constraints.\n"
+                    "Do NOT guess values.\n"
+                    "Only include fields explicitly mentioned or clearly implied.\n"
+                    "Hex addresses must be converted to integers.\n"
+                )
+            },
+            {
+                "role": "user",
+                "content": f"""
+User query:
+{user_query}
+
+HyDE interpretation:
+{hyde_text}
+"""
+            }
+        ],
+    )
+
+Give me policy for address 0x1D320000 in kaanapalli project
+PolicyQuery(
+    project="KAANAPALLI",
+    addr_start=0x1D320000,
+    addr_end=0x1D320000
+)
+
+
 
 from typing import Optional, List
 from pydantic import BaseModel, Field, model_validator
