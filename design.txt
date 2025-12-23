@@ -1,3 +1,74 @@
+
+from typing import Optional, List
+from pydantic import BaseModel, Field, model_validator
+
+class PolicyQuery(BaseModel):
+    # ---- identifiers ----
+    project: Optional[str] = None
+    version: Optional[str] = None
+    mpu_name: Optional[str] = None
+
+    # ---- address ----
+    addr_start: Optional[int] = None
+    addr_end: Optional[int] = None
+
+    # ---- access ----
+    read_domains: Optional[List[str]] = None
+    write_domains: Optional[List[str]] = None
+
+    profile: Optional[str] = None
+
+    # ---- diagnostics ----
+    missing_context: Optional[str] = Field(
+        None,
+        description="Explains what mandatory context is missing, if any"
+    )
+
+Add conditional validation logic
+
+This is the key part 👇
+
+    @model_validator(mode="after")
+    def validate_context_requirements(self):
+        address_query = self.addr_start is not None or self.addr_end is not None
+        mpu_query = self.mpu_name is not None
+
+        if address_query or mpu_query:
+            if not (self.project or self.version):
+                self.missing_context = (
+                    "Project or version is required when querying by "
+                    "address or MPU name."
+                )
+
+        return self
+
+If required context (project or version) is missing,
+leave the field empty and explain it in `missing_context`.
+Do NOT guess.
+
+
+
+Give me policy for address 0x1D320000 in Kaanapalli
+
+Give me policy for address 0x1D320000
+What is the policy for AOSS_PERIPH_MPU_XPU4?
+
+
+query = extract_query_facts(user_query, hyde_text)
+
+if query.missing_context:
+    return {
+        "status": "need_more_info",
+        "message": query.missing_context
+    }
+
+# Safe to proceed
+sql_where, params = build_sql_filters(query)
+
+if address_query and not (self.project or self.version):
+    raise ValueError("Project or version required for address queries")
+
+
 logger.debug(
     "PRTN index=%s start=%s end=%s rdomains=%s wdomains=%s",
     prtn.get("index"),
