@@ -1,4 +1,83 @@
 
+def embed_and_store(
+    conn,
+    embed_fn,
+    regions: list,
+):
+    """
+    conn      : psycopg2 connection
+    embed_fn  : callable(text) -> list[float]
+    regions   : list[ParsedRegion]
+    """
+
+    sql = """
+    INSERT INTO policy_chunks (
+        project,
+        version,
+        mpu_name,
+        rg_index,
+        addr_start,
+        addr_end,
+        read_domains,
+        write_domains,
+        raw_text,
+        embedding
+    )
+    VALUES (
+        %(project)s,
+        %(version)s,
+        %(mpu_name)s,
+        %(rg_index)s,
+        %(addr_start)s,
+        %(addr_end)s,
+        %(read_domains)s,
+        %(write_domains)s,
+        %(raw_text)s,
+        %(embedding)s
+    )
+    """
+
+    with conn.cursor() as cur:
+        for region in regions:
+            # ---------- hard safety checks ----------
+            if region.addr_start is None or region.addr_end is None:
+                continue
+
+            if region.addr_start > region.addr_end:
+                continue
+
+            # ---------- build semantic text ----------
+            embed_text = build_embedding_text(region)
+
+            # ---------- generate vector ----------
+            embedding = embed_fn(embed_text)
+
+            # ---------- store ----------
+            cur.execute(
+                sql,
+                {
+                    "project": region.project,
+                    "version": region.version,
+                    "mpu_name": region.mpu_name,
+                    "rg_index": region.rg_index,
+                    "addr_start": region.addr_start,
+                    "addr_end": region.addr_end,
+                    "read_domains": region.read_domains or [],
+                    "write_domains": region.write_domains or [],
+                    "raw_text": region.raw_text,
+                    "embedding": embedding,
+                },
+            )
+
+        conn.commit()
+
+
+
+
+
+
+
+
 import re
 from typing import Optional
 from dataclasses import dataclass
