@@ -1,3 +1,17 @@
+
+def debug_print_region(region, prefix="REGION"):
+    print(f"\n[{prefix}]")
+    print(f"  project      : {region.project}")
+    print(f"  version      : {region.version}")
+    print(f"  mpu_name     : {region.mpu_name}")
+    print(f"  rg_index     : {region.rg_index}")
+    print(f"  addr_start   : {hex(region.addr_start) if region.addr_start is not None else None}")
+    print(f"  addr_end     : {hex(region.addr_end) if region.addr_end is not None else None}")
+    print(f"  profile      : {getattr(region, 'profile', None)}")
+    print(f"  read_domains : {region.read_domains} (type={type(region.read_domains)})")
+    print(f"  write_domains: {region.write_domains} (type={type(region.write_domains)})")
+    print(f"  raw_text     : {region.raw_text[:120]}...")
+
 def compute_chunk_hash(region: ParsedRegion) -> str:
     h = hashlib.sha256()
     h.update(region.project.encode())
