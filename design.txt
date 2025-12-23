@@ -1,3 +1,14 @@
+def compute_chunk_hash(region: ParsedRegion) -> str:
+    h = hashlib.sha256()
+    h.update(region.project.encode())
+    h.update(region.version.encode())
+    h.update(region.mpu_name.encode())
+    h.update(str(region.rg_index).encode())
+    h.update(str(region.addr_start).encode())
+    h.update(str(region.addr_end).encode())
+    h.update(region.profile.encode())
+    h.update(region.raw_text.encode())
+    return h.hexdigest()
 
 def embed_and_store(
     conn,
