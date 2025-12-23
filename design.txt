@@ -1,3 +1,12 @@
+logger.debug(
+    "PRTN index=%s start=%s end=%s rdomains=%s wdomains=%s",
+    prtn.get("index"),
+    start_raw,
+    end_raw,
+    prtn.get("rdomains"),
+    prtn.get("wdomains"),
+)
+
 
 str:
         return (
