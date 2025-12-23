@@ -1,4 +1,19 @@
 
+str:
+        return (
+            "ParsedRegion("
+            f"project={self.project}, "
+            f"version={self.version}, "
+            f"mpu={self.mpu_name}, "
+            f"rg_index={self.rg_index}, "
+            f"addr=0x{self.addr_start:X}-0x{self.addr_end:X}, "
+            f"profile={self.profile or '∅'}, "
+            f"read_domains={self.read_domains}, "
+            f"write_domains={self.write_domains}"
+            ")"
+        )
+
+
 def debug_print_region(region, prefix="REGION"):
     print(f"\n[{prefix}]")
     print(f"  project      : {region.project}")
