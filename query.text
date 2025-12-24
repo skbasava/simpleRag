@@ -1,3 +1,73 @@
+
+class Planner:
+
+    def plan(self, facts: Facts) -> list[QueryPlan]:
+        plans = []
+        qid = 1
+
+        # ---- missing project → clarification ----
+        if not facts.project:
+            return [
+                QueryPlan(
+                    id=qid,
+                    action="CLARIFY",
+                    params={"question": "Which project is this policy for?"}
+                )
+            ]
+
+        version = facts.version or "latest"
+
+        # ---- ADDRESS based ----
+        if facts.intent == "ADDRESS":
+            plans.append(
+                QueryPlan(
+                    id=qid,
+                    action="VECTOR_SEARCH",
+                    params={
+                        "keywords": [facts.address],
+                        "filters": {
+                            "project": facts.project,
+                            "version": version
+                        }
+                    }
+                )
+            )
+            qid += 1
+
+        # ---- POLICY by MPU ----
+        if facts.intent == "POLICY":
+            if not facts.mpu_name:
+                return [
+                    QueryPlan(
+                        id=qid,
+                        action="CLARIFY",
+                        params={"question": "Which MPU name is this policy for?"}
+                    )
+                ]
+
+            plans.append(
+                QueryPlan(
+                    id=qid,
+                    action="VECTOR_SEARCH",
+                    params={
+                        "keywords": [facts.mpu_name],
+                        "filters": {
+                            "project": facts.project,
+                            "version": version,
+                            "profile": facts.profile
+                        }
+                    }
+                )
+            )
+
+        return plans
+
+
+
+
+
+
+
 You are a query planner for an MPU access control policy system.
 
 Your job is to extract structured query intent from a user question.
