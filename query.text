@@ -1,3 +1,17 @@
+import json
+import logging
+
+logger = logging.getLogger("query_planner")
+logger.setLevel(logging.INFO)
+
+
+def log_plans(plans: list[QueryPlan], *, stage: str):
+    logger.info(
+        "[QUERY_PLANS] stage=%s plans=%s",
+        stage,
+        json.dumps([p.to_log() for p in plans], indent=2),
+    )
+
 
 class Planner:
 
