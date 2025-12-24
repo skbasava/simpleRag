@@ -1,3 +1,83 @@
+from pydantic import BaseModel, Field
+from typing import Optional
+
+
+class QueryFacts(BaseModel):
+    intent: str = Field(
+        description="High-level intent such as ADDRESS_LOOKUP, POLICY_LOOKUP"
+    )
+
+    project: Optional[str] = Field(
+        None, description="SoC / project name"
+    )
+
+    version: Optional[str] = Field(
+        None, description="Platform version. Null means latest"
+    )
+
+    mpu_name: Optional[str] = Field(
+        None, description="MPU name if explicitly mentioned"
+    )
+
+    addr_start: Optional[int] = Field(
+        None, description="Start address as integer"
+    )
+
+    addr_end: Optional[int] = Field(
+        None, description="End address if available"
+    )
+
+    profile: Optional[str] = Field(
+        None, description="Security profile like TME_FW, TZ, XBL"
+    )
+
+
+def extract_query_facts(
+    ins_client,
+    user_query: str,
+    hyde_text: str,
+) -> QueryFacts:
+    """
+    Extract structured query facts using Instructor.
+    This function does NOT plan queries.
+    """
+
+    return ins_client.chat.completions.create(
+        model="Turbo",
+        response_model=QueryFacts,
+        temperature=0,
+        messages=[
+            {
+                "role": "system",
+                "content": """
+You extract structured MPU access-control query facts.
+
+Rules:
+- Use HyDE interpretation as authoritative context.
+- Do NOT invent values.
+- If a value is missing or unclear, return null.
+- Convert hex addresses to integers.
+- If project or address is explicitly stated in HyDE, you MUST extract it.
+- If version is not mentioned, return null.
+"""
+            },
+            {
+                "role": "user",
+                "content": f"""
+User query:
+{user_query}
+
+HyDE interpretation:
+{hyde_text}
+"""
+            }
+        ],
+    )
+
+
+
+
+
 import json
 import logging
 
