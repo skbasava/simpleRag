@@ -1,0 +1,201 @@
+You are a query planner for an MPU access control policy system.
+
+Your job is to extract structured query intent from a user question.
+
+Rules:
+1. Identify project names if mentioned. If not mentioned, mark project as MISSING.
+2. Identify version if mentioned. If not, assume "latest".
+3. Identify MPU name if mentioned.
+4. Identify address if mentioned (single address, not range).
+5. Identify profile if mentioned (TZ, MSA, TME_FW, HYP). Empty means TZ.
+6. Decide the query intent type:
+   - ADDRESS_LOOKUP (address → policy)
+   - MPU_POLICY (policy for MPU)
+   - COMPARE (compare across projects or versions)
+
+Do NOT answer the question.
+Do NOT generate SQL.
+Do NOT generate embeddings.
+
+Return ONLY structured data matching the schema.
+
+
+
+from pydantic import BaseModel
+from typing import Optional, List, Literal
+
+QueryIntent = Literal[
+    "ADDRESS_LOOKUP",
+    "MPU_POLICY",
+    "COMPARE"
+]
+
+class PlannedQuery(BaseModel):
+    intent: QueryIntent
+
+    project: Optional[str] = None
+    version: Optional[str] = "latest"
+
+    mpu_name: Optional[str] = None
+    address: Optional[str] = None  # hex string like 0x1D320000
+
+    profile: Optional[str] = None  # TZ, MSA, TME_FW, etc.
+
+    compare_projects: Optional[List[str]] = None
+    compare_versions: Optional[List[str]] = None
+
+def execute_planned_query(plan: PlannedQuery):
+    # 1. Resolve missing context
+    if plan.project is None and plan.intent != "COMPARE":
+        return ask_user_for_project()
+
+    # 2. Build vector query (HyDE already done)
+    vector_candidates = vector_search(
+        text=hyde_text,
+        top_k=50
+    )
+
+    # 3. Build SQL filters from planner output
+    sql_filters = {
+        "project": plan.project,
+        "version": plan.version,
+        "mpu_name": plan.mpu_name,
+        "profile": plan.profile,
+        "address": plan.address,
+        "chunk_ids": [c.id for c in vector_candidates],
+    }
+
+    sql_rows = run_sql(sql_filters)
+
+    return sql_rows
+
+
+
+from typing import Optional, Literal
+from pydantic import BaseModel
+import re
+
+# -------------------------
+# Models
+# -------------------------
+
+QueryIntent = Literal[
+    "ADDRESS_LOOKUP",
+    "MPU_POLICY",
+    "COMPARE"
+]
+
+class PlannedQuery(BaseModel):
+    intent: QueryIntent
+    project: Optional[str] = None
+    version: str = "latest"
+    mpu_name: Optional[str] = None
+    address: Optional[str] = None
+    profile: Optional[str] = None
+
+
+class Clarification(BaseModel):
+    needs_clarification: bool
+    question: str
+
+
+# -------------------------
+# Query Planner
+# -------------------------
+
+class QueryPlanner:
+    """
+    Text-only planner.
+    Does NOT run vector search.
+    Does NOT run SQL.
+    """
+
+    PROJECT_PATTERN = re.compile(r"\b(project\s+)?([a-zA-Z0-9_-]+)\b", re.I)
+    ADDR_PATTERN = re.compile(r"0x[0-9a-fA-F]{6,8}")
+    VERSION_PATTERN = re.compile(r"version\s+([\d.]+)", re.I)
+    MPU_PATTERN = re.compile(r"\bMPU[_\w]+\b", re.I)
+
+    def plan(self, user_query: str, hyde_text: str) -> PlannedQuery:
+        text = f"{user_query}\n{hyde_text}"
+
+        address = self._extract_address(text)
+        project = self._extract_project(text)
+        version = self._extract_version(text) or "latest"
+        mpu = self._extract_mpu(text)
+
+        intent = self._infer_intent(address, mpu, user_query)
+
+        return PlannedQuery(
+            intent=intent,
+            project=project,
+            version=version,
+            mpu_name=mpu,
+            address=address
+        )
+
+    def validate(self, plan: PlannedQuery):
+        if plan.intent == "ADDRESS_LOOKUP" and not plan.project:
+            return Clarification(
+                needs_clarification=True,
+                question="Which project should I search this address in?"
+            )
+
+        if plan.intent == "MPU_POLICY" and not plan.project:
+            return Clarification(
+                needs_clarification=True,
+                question="Please specify the project for the MPU policy lookup."
+            )
+
+        return None
+
+    # -------------------------
+    # Extractors
+    # -------------------------
+
+    def _extract_address(self, text):
+        m = self.ADDR_PATTERN.search(text)
+        return m.group(0) if m else None
+
+    def _extract_version(self, text):
+        m = self.VERSION_PATTERN.search(text)
+        return m.group(1) if m else None
+
+    def _extract_mpu(self, text):
+        m = self.MPU_PATTERN.search(text)
+        return m.group(0) if m else None
+
+    def _extract_project(self, text):
+        # Very conservative: require explicit "project <name>"
+        m = re.search(r"project\s+([a-zA-Z0-9_-]+)", text, re.I)
+        return m.group(1) if m else None
+
+    def _infer_intent(self, address, mpu, query):
+        if address:
+            return "ADDRESS_LOOKUP"
+        if mpu:
+            return "MPU_POLICY"
+        if "compare" in query.lower():
+            return "COMPARE"
+        return "MPU_POLICY"
+
+
+# -------------------------
+# Example usage
+# -------------------------
+
+if __name__ == "__main__":
+    planner = QueryPlanner()
+
+    user_query = "Give me policy for address 0x1D320000 in kaanapalli"
+    hyde_text = (
+        "MPU access control policy lookup for address 0x1D320000 "
+        "in kaanapalli SoC subsystem."
+    )
+
+    plan = planner.plan(user_query, hyde_text)
+    clarification = planner.validate(plan)
+
+    if clarification:
+        print(clarification.json(indent=2))
+    else:
+        print(plan.json(indent=2))
