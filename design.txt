@@ -1,3 +1,37 @@
+
+def build_semantic_chunk(self, region: ParsedRegion) -> str:
+    lines = []
+
+    if region.mpu_name:
+        lines.append(f"This MPU region belongs to {region.mpu_name}.")
+
+    lines.append("This region defines access-control policy for a memory range.")
+
+    if region.read_domains:
+        lines.append(
+            f"Read access is allowed to the following domains: {', '.join(region.read_domains)}."
+        )
+    else:
+        lines.append("Read access is not explicitly defined.")
+
+    if region.write_domains:
+        lines.append(
+            f"Write access is allowed to the following domains: {', '.join(region.write_domains)}."
+        )
+    else:
+        lines.append("Write access is not explicitly defined.")
+
+    if region.profile:
+        lines.append(f"This policy applies under the {region.profile} execution profile.")
+
+    if region.raw_text:
+        lines.append("Additional policy details:")
+        lines.append(region.raw_text)
+
+    return " ".join(lines)
+
+
+
 User Query
    ↓
 HyDE rewrite (natural language intent)
