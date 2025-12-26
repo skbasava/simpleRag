@@ -1,3 +1,47 @@
+from typing import Tuple, Optional, Union
+
+def normalize_version(v: Optional[Union[str, tuple]]) -> Tuple[int, ...]:
+    """
+    Normalize version into a comparable tuple.
+    Safe against None, tuple, 'v5.3', '5.3-beta'.
+    """
+
+    if v is None:
+        return ()
+
+    # Handle psycopg2 tuple like ('5.3',)
+    if isinstance(v, tuple):
+        if len(v) == 1:
+            v = v[0]
+        else:
+            raise ValueError(f"Invalid version tuple: {v}")
+
+    if not isinstance(v, str):
+        raise TypeError(f"Version must be string, got {type(v)}")
+
+    v = v.strip().lower()
+
+    # Remove leading 'v'
+    if v.startswith("v"):
+        v = v[1:]
+
+    parts = []
+    for p in v.split("."):
+        # strip non-numeric suffixes: 5, 5-beta → 5
+        num = ""
+        for c in p:
+            if c.isdigit():
+                num += c
+            else:
+                break
+        if num:
+            parts.append(int(num))
+
+    return tuple(parts)
+
+
+
+
 
 def build_semantic_chunk(self, region: ParsedRegion) -> str:
     lines = []
