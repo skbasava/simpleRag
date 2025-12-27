@@ -1,3 +1,55 @@
+def vector_search(
+    self,
+    query_vector: list[float],
+    project: str | None = None,
+    version: str | None = None,
+    limit: int = 5,
+):
+    where_clauses = []
+    params = []
+
+    # ---- scope rules ----
+    if project:
+        where_clauses.append("project = %s")
+        params.append(project)
+
+    if version:
+        where_clauses.append("version = %s")
+        params.append(version)
+    else:
+        where_clauses.append("is_latest = true")
+
+    where_sql = " AND ".join(where_clauses)
+
+    sql = f"""
+        SELECT
+            id,
+            project,
+            version,
+            raw_text,
+            embedding <=> %s::vector AS distance
+        FROM xml_chunks
+        WHERE {where_sql}
+        ORDER BY embedding <=> %s::vector
+        LIMIT %s
+    """
+
+    with psycopg2.connect(PG_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                sql,
+                [query_vector] + params + [query_vector, limit]
+            )
+            return cur.fetchall()
+
+
+
+
+
+
+
+
+
 from typing import Tuple, Optional, Union
 
 def normalize_version(v: Optional[Union[str, tuple]]) -> Tuple[int, ...]:
