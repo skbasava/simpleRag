@@ -1,3 +1,30 @@
+
+SYSTEM_PROMPT = """
+You are a low-level SoC security expert.
+You MUST answer using ONLY the provided context.
+If an address is not present, say "Address not defined".
+Never invent addresses or MPU names.
+"""
+
+USER_PROMPT_TEMPLATE = """
+User Question:
+{question}
+
+Context (MPU regions retrieved from database):
+{context}
+
+Instructions:
+- Answer in plain English
+- Clearly list address ranges
+- Group by MPU name
+- If multiple regions exist, list them in ascending region index order
+"""
+
+
+
+
+
+
 def vector_search(
     self,
     query_vector: list[float],
