@@ -3,10 +3,30 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 
+class LatestVersionResolver:
+    """
+    Resolves latest version for a project using project_versions table.
+    """
+
+    def __init__(self, connection):
+        self.conn = connection
+
+    def resolve(self, project: str) -> Optional[str]:
+        sql = """
+        SELECT version
+        FROM project_versions
+        WHERE project = %s AND is_latest = TRUE
+        """
+        with self.conn.cursor() as cur:
+            cur.execute(sql, (project,))
+            row = cur.fetchone()
+            return row[0] if row else None
+
+
 class SQLQueryBuilder:
     """
-    Responsible ONLY for building deterministic SQL queries
-    from structured filters.
+    Builds SQL deterministically from filters.
+    Automatically resolves latest version if version is missing.
     """
 
     BASE_SELECT = """
@@ -22,10 +42,13 @@ class SQLQueryBuilder:
     FROM xml_chunks
     """
 
-    def __init__(self, filters: Dict):
+    def __init__(self, filters: Dict, connection):
         self.filters = filters
+        self.conn = connection
         self.conditions: List[str] = []
         self.params: List = []
+
+        self.version_resolver = LatestVersionResolver(connection)
 
     def _apply_project(self):
         if self.filters.get("project"):
@@ -33,9 +56,17 @@ class SQLQueryBuilder:
             self.params.append(self.filters["project"])
 
     def _apply_version(self):
-        if self.filters.get("version"):
+        """
+        If version not provided, auto-resolve latest for the project.
+        """
+        version = self.filters.get("version")
+
+        if not version and self.filters.get("project"):
+            version = self.version_resolver.resolve(self.filters["project"])
+
+        if version:
             self.conditions.append("version = %s")
-            self.params.append(self.filters["version"])
+            self.params.append(version)
 
     def _apply_mpu(self):
         if self.filters.get("mpu_name"):
@@ -62,7 +93,7 @@ class SQLQueryBuilder:
 
 class SQLExecutor:
     """
-    Responsible ONLY for executing SQL and returning rows.
+    Executes SQL and returns rows.
     """
 
     def __init__(self, connection):
@@ -76,14 +107,14 @@ class SQLExecutor:
 
 class SQLRepository:
     """
-    Facade class used by the application.
-    Combines builder + executor.
+    Facade used by application / RAG layer.
     """
 
     def __init__(self, connection):
+        self.conn = connection
         self.executor = SQLExecutor(connection)
 
     def fetch_policies(self, filters: Dict) -> List[Dict]:
-        builder = SQLQueryBuilder(filters)
+        builder = SQLQueryBuilder(filters, self.conn)
         sql, params = builder.build()
         return self.executor.fetch_all(sql, params)
