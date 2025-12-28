@@ -1,4 +1,27 @@
 
+def classify_policy(start: int, end: int, profile: str) -> dict:
+    if start == 0xFFFFFFFF and end == 0xFFFFFFFF:
+        if profile and profile.upper() == "NON_STATIC":
+            return {
+                "policy_type": "RUNTIME_PROGRAMMED",
+                "address": None,
+                "explanation": "Address will be programmed by software at runtime"
+            }
+        else:
+            return {
+                "policy_type": "UNUSED_POLICY",
+                "address": None,
+                "explanation": "Unused MPU policy (address intentionally not defined)"
+            }
+
+    return {
+        "policy_type": "ADDRESS_DEFINED",
+        "address": f"{hex(start)} - {hex(end)}",
+        "explanation": "Statically defined address range"
+    }
+
+
+
 def ask_llm(question: str, vector_rows: list[dict], llm_client) -> str:
     context = build_llm_context(vector_rows)
 
