@@ -1,0 +1,50 @@
+from db.sql_query import SQLQueryEngine
+from db.vector_search import VectorSearchEngine
+from db.policy_classifier import classify_policy
+from llm.llm_client import LLMClient
+
+class Executor:
+    def __init__(self, embedder):
+        self.sql = SQLQueryEngine()
+        self.vector = VectorSearchEngine()
+        self.llm = LLMClient()
+        self.embedder = embedder
+
+    def run(self, semantic_query, filters):
+        sql_rows = self.sql.search(
+            project=filters["project"],
+            mpu_name=filters.get("mpu"),
+            version=filters.get("version"),
+        )
+
+        rows = sql_rows
+        if not rows:
+            vec = self.embedder.embed(semantic_query)
+            rows = self.vector.search(
+                vec,
+                filters["project"],
+                filters.get("mpu"),
+                filters.get("version"),
+            )
+
+        context = []
+        for r in rows:
+            cls = classify_policy(r["addr_start"], r["addr_end"], r["profile"])
+            context.append(f"""
+MPU: {r['mpu_name']}
+Region: {r['rg_index']}
+Policy: {cls['policy_type']}
+Address: {cls['address']}
+Note: {cls['explanation']}
+""".strip())
+
+        prompt = f"""
+User Question:
+{semantic_query}
+
+MPU Context:
+{"\n\n".join(context)}
+
+Answer clearly. Group by MPU.
+"""
+        return self.llm.ask(prompt)
