@@ -1,4 +1,27 @@
 
+def ask_llm(question: str, vector_rows: list[dict], llm_client) -> str:
+    context = build_llm_context(vector_rows)
+
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": USER_PROMPT_TEMPLATE.format(
+                question=question,
+                context=context
+            )
+        }
+    ]
+
+    response = llm_client.chat.completions.create(
+        model="gpt-4o-mini",   # or your QGenie chat model
+        messages=messages,
+        temperature=0.0        # IMPORTANT for factual answers
+    )
+
+    return response.choices[0].message.content
+
+
 SYSTEM_PROMPT = """
 You are a low-level SoC security expert.
 You MUST answer using ONLY the provided context.
