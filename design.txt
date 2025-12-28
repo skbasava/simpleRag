@@ -1,3 +1,22 @@
+def build_policy_context(classified_policies: list[dict]) -> str:
+    lines = []
+
+    for p in classified_policies:
+        lines.append(f"""
+Project: {p['project']}
+Version: {p['version']}
+MPU: {p['mpu_name']}
+Region: {p['region']}
+Profile: {p['profile']}
+Policy Type: {p['policy_type']}
+
+Explanation:
+{p['explanation']}
+""")
+
+    return "\n---\n".join(lines)
+
+
 
 def classify_policy(start: int, end: int, profile: str) -> dict:
     if start == 0xFFFFFFFF and end == 0xFFFFFFFF:
