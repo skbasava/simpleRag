@@ -1,4 +1,62 @@
 
+class Executor:
+    def __init__(self, sql, vector):
+        self.sql = sql
+        self.vector = vector
+        self.results = {}
+
+    def run(self, plan: ExecutionPlan):
+        for idx, step in enumerate(plan.steps):
+
+            if not self._deps_satisfied(step):
+                continue
+
+            if step.action == "SQL_SEARCH":
+                self.results[idx] = self._sql_search(step.params)
+
+            elif step.action == "VECTOR_SEARCH":
+                self.results[idx] = self._vector_search(step.params)
+
+            elif step.action == "CLARIFY":
+                return step.params
+
+            else:
+                raise ValueError(f"Unknown action {step.action}")
+
+        return self._final()
+
+    def _deps_satisfied(self, step):
+        if not step.deps:
+            return True
+        return all(self.results.get(i) for i in step.deps)
+
+    def _sql_search(self, params):
+        rows = self.sql.fetch_policies(params)
+        for r in rows:
+            r.update(classify_policy(
+                r["addr_start"], r["addr_end"], r["profile"]
+            ))
+        return rows
+
+    def _vector_search(self, params):
+        return self.vector.search(
+            query_text=params["query_text"],
+            filters=params.get("filters", {}),
+            top_k=params.get("top_k", 10),
+        )
+
+    def _final(self):
+        for idx in reversed(self.results):
+            if self.results[idx]:
+                return self.results[idx]
+        return []
+
+
+
+
+
+
+
 class Planner:
     def plan(self, facts: QueryFacts) -> ExecutionPlan:
 
