@@ -1,3 +1,79 @@
+
+class Planner:
+    def plan(self, facts: QueryFacts) -> ExecutionPlan:
+
+        if not facts.intent:
+            return ExecutionPlan(
+                steps=[
+                    PlanStep(
+                        action="CLARIFY",
+                        params={"reason": "Missing intent"}
+                    )
+                ],
+                reason="Insufficient facts"
+            )
+
+        intent = facts.intent.upper()
+
+        # ADDRESS LOOKUP → SQL + VECTOR fallback
+        if intent == "ADDRESS_LOOKUP":
+            return ExecutionPlan(
+                reason="Address lookup with fallback",
+                steps=[
+                    PlanStep(
+                        action="SQL_SEARCH",
+                        params={
+                            "project": facts.project,
+                            "version": facts.version,
+                            "mpu_name": facts.mpu_name,
+                        },
+                    ),
+                    PlanStep(
+                        action="VECTOR_SEARCH",
+                        deps=[0],
+                        params={
+                            "query_text": facts.raw_text,
+                            "filters": {"project": facts.project},
+                        },
+                    ),
+                ],
+            )
+
+        # POLICY LOOKUP → SQL only
+        if intent == "POLICY_LOOKUP":
+            return ExecutionPlan(
+                reason="Structured policy lookup",
+                steps=[
+                    PlanStep(
+                        action="SQL_SEARCH",
+                        params={
+                            "project": facts.project,
+                            "version": facts.version,
+                            "mpu_name": facts.mpu_name,
+                        },
+                    )
+                ],
+            )
+
+        # fallback
+        return ExecutionPlan(
+            reason="Unstructured query",
+            steps=[
+                PlanStep(
+                    action="VECTOR_SEARCH",
+                    params={
+                        "query_text": facts.raw_text,
+                        "filters": {},
+                    }
+                )
+            ],
+        )
+
+
+
+
+
+
 def build_policy_context(classified_policies: list[dict]) -> str:
     lines = []
 
