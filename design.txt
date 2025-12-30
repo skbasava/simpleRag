@@ -1,3 +1,58 @@
+from rank_bm25 import BM25Okapi
+
+def bm25_confidence_score(user_query: str, rows: list[dict]) -> list[dict]:
+    # Build corpus
+    corpus = []
+    for r in rows:
+        doc = " ".join(filter(None, [
+            r.get("mpu_name"),
+            r.get("profile"),
+            r.get("raw_text"),
+            r.get("explanation"),
+        ]))
+        corpus.append(normalize(doc))
+
+    tokenized_corpus = [doc.split() for doc in corpus]
+    bm25 = BM25Okapi(tokenized_corpus)
+
+    query_tokens = normalize(user_query).split()
+    scores = bm25.get_scores(query_tokens)
+
+    # Attach score
+    for row, score in zip(rows, scores):
+        row["confidence_score"] = round(float(score), 3)
+
+    return rows
+
+
+def normalize_scores(rows):
+    scores = [r["confidence_score"] for r in rows]
+    max_score = max(scores) if scores else 1.0
+
+    for r in rows:
+        r["confidence_norm"] = round(r["confidence_score"] / max_score, 3)
+
+    return rows
+
+rows = bm25_confidence_score(user_query, rows)
+rows = normalize_scores(rows)
+
+rows.sort(
+    key=lambda r: (
+        r["confidence_norm"],       # textual relevance
+        -(r["addr_end"] - r["addr_start"])  # region specificity
+    ),
+    reverse=True
+)
+
+
+row["confidence_reason"] = (
+    f"High relevance because query terms matched MPU name, profile, "
+    f"and address range description."
+)
+
+
+
 
 class SQLQueryBuilder:
     BASE_SELECT = """
