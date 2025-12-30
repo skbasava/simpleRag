@@ -1,3 +1,33 @@
+def build_explanation(row, facts):
+    explanations = []
+
+    if facts.addr_start is not None:
+        if row["addr_start"] <= facts.addr_start <= row["addr_end"]:
+            explanations.append(
+                f"Address 0x{facts.addr_start:X} falls within MPU region "
+                f"0x{row['addr_start']:X}–0x{row['addr_end']:X}"
+            )
+
+    if facts.mpu_name and row["mpu_name"] == facts.mpu_name:
+        explanations.append(
+            f"MPU name '{row['mpu_name']}' explicitly matched the query"
+        )
+
+    if facts.profile and row.get("profile") == facts.profile:
+        explanations.append(
+            f"MPU profile '{row['profile']}' matches the requested profile"
+        )
+
+    if not explanations:
+        explanations.append(
+            "Selected as the closest matching MPU region based on policy metadata"
+        )
+
+    return "; ".join(explanations)
+
+
+
+
 from rank_bm25 import BM25Okapi
 
 def bm25_confidence_score(user_query: str, rows: list[dict]) -> list[dict]:
