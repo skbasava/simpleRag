@@ -1,4 +1,97 @@
 
+class SQLQueryBuilder:
+    BASE_SELECT = """
+    SELECT
+        project,
+        version,
+        mpu_name,
+        rg_index,
+        addr_start,
+        addr_end,
+        profile,
+        raw_text
+    FROM xml_chunks
+    """
+
+    def __init__(self, filters: dict, connection):
+        self.filters = filters
+        self.conn = connection
+        self.conditions = []
+        self.params = []
+
+        self.version_resolver = LatestVersionResolver(connection)
+
+    def _apply_project(self):
+        project = self.filters.get("project")
+        if project:
+            self.conditions.append("project = %s")
+            self.params.append(project.lower())
+
+    def _apply_version(self):
+        version = self.filters.get("version")
+        project = self.filters.get("project")
+
+        if not version and project:
+            version = self.version_resolver.resolve(project)
+
+        if version:
+            self.conditions.append("version = %s")
+            self.params.append(version)
+
+    def _apply_mpu(self):
+        mpu_name = self.filters.get("mpu_name")
+        if mpu_name:
+            self.conditions.append("LOWER(mpu_name) = %s")
+            self.params.append(mpu_name.lower())
+
+    def _apply_address_overlap(self):
+        start = self.filters.get("addr_start")
+        end = self.filters.get("addr_end")
+
+        if start is None:
+            raise ValueError("addr_start is required for region lookup")
+
+        if end is None:
+            end = start  # 🔥 point query collapses to range
+
+        # Overlap condition
+        self.conditions.append("addr_start <= %s")
+        self.params.append(end)
+
+        self.conditions.append("addr_end >= %s")
+        self.params.append(start)
+
+    def build(self):
+        intent = self.filters.get("intent")
+
+        if intent != "REGION_LOOKUP":
+            raise ValueError(f"Unsupported SQL intent: {intent}")
+
+        # Apply filters
+        self._apply_project()
+        self._apply_version()
+        self._apply_mpu()
+        self._apply_address_overlap()
+
+        where_clause = ""
+        if self.conditions:
+            where_clause = "WHERE " + " AND ".join(self.conditions)
+
+        # Prefer smallest enclosing region
+        order_clause = """
+        ORDER BY (addr_end - addr_start) ASC
+        """
+
+        sql = f"""
+        {self.BASE_SELECT}
+        {where_clause}
+        {order_clause}
+        """
+
+        return sql.strip(), self.params
+
+
+
 
 def build(self) -> Tuple[str, List]:
     """
