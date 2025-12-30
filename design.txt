@@ -1,4 +1,27 @@
 
+addr = self.filters.get("addr_start")
+end = self.filters.get("addr_end")
+
+if addr is None:
+    raise ValueError("addr_start is required")
+
+if end is None:
+    # POINT LOOKUP
+    self.conditions.append("addr_start <= %s")
+    self.params.append(addr)
+
+    self.conditions.append("addr_end >= %s")
+    self.params.append(addr)
+else:
+    # RANGE LOOKUP
+    self.conditions.append("addr_start <= %s")
+    self.params.append(addr)
+
+    self.conditions.append("addr_end >= %s")
+    self.params.append(end)
+
+
+
 class Executor:
     def __init__(self, sql, vector):
         self.sql = sql
