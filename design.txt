@@ -1,4 +1,108 @@
 
+
+def build(self) -> Tuple[str, List]:
+    """
+    Build SQL and params for MPU / address lookups.
+    """
+
+    # Defensive init
+    self.conditions = getattr(self, "conditions", []) or []
+    self.params = getattr(self, "params", []) or []
+
+    # Base filters first (never erased)
+    self._apply_project()
+    self._apply_version()
+
+    intent = self.filters.get("intent")
+    order_by_clause = ""
+    limit_clause = ""
+
+    # --------------------------------------------------
+    # 1️⃣ ADDRESS_POLICY_LOOKUP (single address)
+    # --------------------------------------------------
+    if intent == "ADDRESS_POLICY_LOOKUP":
+        addr = self.filters.get("addr_start")
+
+        if addr is None:
+            raise ValueError("addr_start is required for ADDRESS_POLICY_LOOKUP")
+
+        # Point-in-region test
+        self.conditions.append("addr_start <= %s")
+        self.conditions.append("addr_end >= %s")
+        self.params.extend([addr, addr])
+
+        # MPU precedence: smallest region wins
+        order_by_clause = "ORDER BY (addr_end - addr_start) ASC, rg_index ASC"
+        limit_clause = "LIMIT 1"
+
+    # --------------------------------------------------
+    # 2️⃣ ADDRESS_RANGE_LOOKUP (explicit range)
+    # --------------------------------------------------
+    elif intent == "ADDRESS_RANGE_LOOKUP":
+        start = self.filters.get("addr_start")
+        end = self.filters.get("addr_end")
+
+        if start is None or end is None:
+            raise ValueError("addr_start and addr_end required for ADDRESS_RANGE_LOOKUP")
+
+        # Overlapping regions
+        self.conditions.append("addr_start <= %s")
+        self.conditions.append("addr_end >= %s")
+        self.params.extend([end, start])
+
+        order_by_clause = "ORDER BY addr_start ASC, rg_index ASC"
+
+    # --------------------------------------------------
+    # 3️⃣ MPU_RANGE_LOOKUP (all regions for MPU)
+    # --------------------------------------------------
+    elif intent == "MPU_RANGE_LOOKUP":
+        self._apply_mpu()
+
+        order_by_clause = "ORDER BY rg_index ASC"
+
+    # --------------------------------------------------
+    # 4️⃣ PROFILE_LOOKUP
+    # --------------------------------------------------
+    elif intent == "PROFILE_LOOKUP":
+        profile = self.filters.get("profile")
+        if not profile:
+            raise ValueError("profile required for PROFILE_LOOKUP")
+
+        self.conditions.append("profile = %s")
+        self.params.append(profile)
+
+        order_by_clause = "ORDER BY addr_start ASC"
+
+    # --------------------------------------------------
+    # Unsupported intent
+    # --------------------------------------------------
+    else:
+        raise ValueError(f"Unsupported intent: {intent}")
+
+    # --------------------------------------------------
+    # WHERE clause
+    # --------------------------------------------------
+    where_clause = ""
+    if self.conditions:
+        where_clause = "WHERE " + " AND ".join(self.conditions)
+
+    # --------------------------------------------------
+    # Final SQL
+    # --------------------------------------------------
+    sql = f"""
+    {self.BASE_SELECT}
+    {where_clause}
+    {order_by_clause}
+    {limit_clause}
+    """
+
+    logger.info("SQL preview:\n%s", sql.strip())
+    logger.info("SQL params: %s", self.params)
+
+    return sql.strip(), self.params
+
+
+
 addr = self.filters.get("addr_start")
 end = self.filters.get("addr_end")
 
