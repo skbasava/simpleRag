@@ -1,0 +1,134 @@
+Give me the MPU policy for address 0x0EF01000 in project Kaanapalli ??
+Expected system behavior
+	•	SQL point-address query
+	•	ORDER BY region_size ASC, rg_index DESC
+	•	LIMIT 1
+	•	Explain why this region was selected
+
+What to validate
+	•	Exactly one region
+	•	covers_address = true
+	•	Explanation mentions region bounds and specificity
+
+What policy applies at address 0x1D320000 for MPU AOSS_PERIPH_MPU_XPU4 in Kaanapalli?
+Expected
+	•	SQL filters by project + MPU + address
+	•	No vector hallucination
+	•	Explanation confirms MPU name
+
+What address ranges are covered by MPU AOSS_PERIPH_MPU_XPU4 in Kaanapalli?
+Expected
+	•	SQL path (no address filtering)
+	•	Multiple regions returned
+	•	Sorted by rg_index
+	•	LLM summarizes ranges, not chooses one
+
+Explain the MPU policy at address 0x0EF01000 in Kaanapalli version 5.3
+Expected
+	•	Version resolved exactly
+	•	is_latest ignored
+	•	No clarification required
+
+Which MPU regions are dynamically programmed at runtime in Kaanapalli?
+Expected
+	•	SQL filters on start=end=0xFFFFFFFF
+	•	Profile = NON_STATIC
+	•	Explanation: “programmed by software at runtime”
+
+clarify prompts
+Give me the MPU policy for address 0x0EF01000
+
+Expected
+	•	No SQL execution
+	•	CLARIFY response:
+“Which project should I check this address for?”
+
+What is the MPU policy in Kaanapalli?
+Expected
+	•	System asks:
+“Do you want an overview of MPUs or policy for a specific address?”
+
+Compare MPU policy changes across versions in Kaanapalli
+
+Expected
+	•	Either:
+	•	Ask user which versions
+	•	Or default safely to latest with explicit note
+
+NEGATIVE PROMPTS 
+
+What MPU policy applies at address 0xFFFFFFFF in kaanapalli?
+
+Expected
+	•	SQL returns zero rows
+	•	LLM response:
+“No MPU region explicitly covers this address.”
+
+Explain MPU AOSS_FAKE_MPU_XPU9 policy in Kaanapalli
+
+Expected
+	•	Zero SQL rows
+	•	Safe refusal:
+“No such MPU exists in the project.”
+
+Give policy for address range 0x20000000 to 0x10000000 in Kaanapalli
+
+Expected
+	•	Validation failure
+	•	Clear error:
+“Start address must be less than end address.”
+
+Based on best practices, what do you think the MPU policy should be for address 0x0EF01000?
+
+Expected
+	•	Refusal:
+“I can only describe MPU policies defined in the database.”
+
+Why does region 12 override region 4 for address 0x0EF01000?
+Expected
+	•	SQL returns multiple rows
+	•	Explanation references:
+	•	region_size
+	•	rg_index
+	•	ordering logic
+
+Which MPU regions cover address range 0x0EF00000 to 0x0EF0FFFF in Kaanapalli?
+Expected
+	•	Range-overlap SQL
+	•	No LIMIT 1
+	•	Multiple regions returned
+	•	LLM explains overlap relationships
+
+What MPU policy applies for TZ profile at address 0x0EF01000 in Kaanapalli?
+Expected
+	•	SQL adds profile filter
+	•	If none found → explain clearly
+
+
+confidences 
+Explain MPU behavior around peripherals in Kaanapalli
+
+Expected
+	•	Low confidence score
+	•	Response notes general nature
+	•	No strong claims
+
+Give MPU policy for AOSS_PERIPH_MPU_XPU4 region 0 in Kaanapalli
+
+Expected
+	•	High confidence score
+	•	Explicit region index mentioned
+
+
+how to use prompts
+{
+  "prompt": "...",
+  "sql_used": true | false,
+  "rows_returned": n,
+  "clarification": true | false,
+  "confidence": 0.0–1.0,
+  "hallucination": false
+}
+
+
+
