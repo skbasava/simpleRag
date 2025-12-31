@@ -1,3 +1,17 @@
+def run_sql_path(self, facts: QueryFacts):
+    builder = SQLQueryBuilder()
+
+    builder.with_project(facts.project)
+    builder.with_version(facts.version)
+    builder.with_mpu(facts.mpu_name)
+
+    if facts.addr_start is not None:
+        builder.with_address(facts.addr_start, facts.addr_end)
+
+    sql, params = builder.build()
+    return self.db.fetch_all(sql, params)
+
+
 def explain_region_choice(row, query_start, query_end, is_point):
     if is_point:
         return (
