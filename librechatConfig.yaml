@@ -1,0 +1,279 @@
+# ==================== LibreChat RAG Plugin Configuration ====================
+
+# Save this as: librechat.yaml in your LibreChat config directory
+
+version: 1.1.0
+
+# RAG Configuration
+
+endpoints:
+custom:
+- name: “RAG-Enhanced Chat”
+apiKey: “${RAG_API_KEY}”
+baseURL: “http://localhost:8000”
+models:
+default:
+- “rag-assistant”
+fetch: false
+titleConvo: true
+titleModel: “gpt-3.5-turbo”
+summarize: false
+summaryModel: “gpt-3.5-turbo”
+forcePrompt: false
+modelDisplayLabel: “RAG Service”
+
+```
+  # RAG-specific settings
+  ragConfig:
+    enabled: true
+    endpoint: "http://localhost:8000/query"
+    indexEndpoint: "http://localhost:8000/index"
+    topK: 5
+    similarityThreshold: 0.7
+    includeContext: true
+    contextPrefix: "Based on the following information:\n\n"
+    contextSuffix: "\n\nPlease answer the following question:"
+```
+
+# ==================== Docker Compose Configuration ====================
+
+-----
+
+# Save this as: docker-compose.rag.yml
+
+version: ‘3.8’
+
+services:
+rag-service:
+build:
+context: ./rag-service
+dockerfile: Dockerfile
+container_name: rag-service
+ports:
+- “8000:8000”
+environment:
+- RAG_API_KEY=${RAG_API_KEY}
+- OPENAI_API_KEY=${OPENAI_API_KEY}
+- RAG_BACKEND=chroma
+- EMBEDDING_PROVIDER=sentence-transformers
+- EMBEDDING_MODEL=all-MiniLM-L6-v2
+- COLLECTION_NAME=librechat_docs
+volumes:
+- ./rag-data:/app/data
+- ./chroma_db:/app/chroma_db
+networks:
+- librechat-network
+restart: unless-stopped
+healthcheck:
+test: [“CMD”, “curl”, “-f”, “http://localhost:8000/health”]
+interval: 30s
+timeout: 10s
+retries: 3
+
+librechat:
+image: librechat/librechat:latest
+container_name: librechat
+ports:
+- “3080:3080”
+depends_on:
+- rag-service
+- mongodb
+environment:
+- MONGO_URI=mongodb://mongodb:27017/LibreChat
+- RAG_API_KEY=${RAG_API_KEY}
+- RAG_SERVICE_URL=http://rag-service:8000
+volumes:
+- ./librechat.yaml:/app/librechat.yaml
+- ./images:/app/client/public/images
+networks:
+- librechat-network
+restart: unless-stopped
+
+mongodb:
+image: mongo:latest
+container_name: librechat-mongodb
+ports:
+- “27017:27017”
+volumes:
+- mongodb-data:/data/db
+networks:
+- librechat-network
+restart: unless-stopped
+
+networks:
+librechat-network:
+driver: bridge
+
+volumes:
+mongodb-data:
+
+# ==================== Environment Variables Template ====================
+
+-----
+
+# Save this as: .env
+
+# RAG Service Configuration
+
+RAG_API_KEY=your-secure-api-key-here
+RAG_BACKEND=chroma
+EMBEDDING_PROVIDER=sentence-transformers
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+
+# OpenAI (if using OpenAI embeddings)
+
+OPENAI_API_KEY=your-openai-key-here
+
+# Pinecone (if using Pinecone backend)
+
+PINECONE_API_KEY=your-pinecone-key-here
+PINECONE_ENVIRONMENT=us-east-1
+
+# Qdrant (if using Qdrant backend)
+
+QDRANT_URL=http://localhost:6333
+QDRANT_API_KEY=your-qdrant-key-here
+
+# LibreChat Configuration
+
+MONGO_URI=mongodb://mongodb:27017/LibreChat
+RAG_SERVICE_URL=http://rag-service:8000
+
+# ==================== Dockerfile ====================
+
+-----
+
+# Save this as: Dockerfile in rag-service directory
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+
+RUN apt-get update && apt-get install -y   
+curl   
+build-essential   
+&& rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+
+COPY requirements.txt .
+
+# Install Python dependencies
+
+RUN pip install –no-cache-dir -r requirements.txt
+
+# Copy application code
+
+COPY . .
+
+# Expose port
+
+EXPOSE 8000
+
+# Health check
+
+HEALTHCHECK –interval=30s –timeout=10s –start-period=5s –retries=3   
+CMD curl -f http://localhost:8000/health || exit 1
+
+# Run the application
+
+CMD [“python”, “rag_service.py”]
+
+# ==================== Requirements.txt ====================
+
+-----
+
+# Save this as: requirements.txt
+
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+python-multipart==0.0.6
+
+# Vector stores
+
+chromadb==0.4.22
+pinecone-client==3.0.0
+qdrant-client==1.7.0
+
+# Embeddings
+
+openai==1.10.0
+sentence-transformers==2.3.1
+transformers==4.37.0
+torch==2.1.2
+
+# Utilities
+
+python-dotenv==1.0.0
+requests==2.31.0
+
+# ==================== Configuration Examples ====================
+
+-----
+
+# Example 1: ChromaDB with Sentence Transformers (Local, Free)
+
+# config_chroma.json
+
+{
+“backend_type”: “chroma”,
+“embedding_provider”: “sentence-transformers”,
+“embedding_model”: “all-MiniLM-L6-v2”,
+“collection_name”: “librechat_docs”,
+“vector_store_config”: {
+“persist_directory”: “./chroma_db”
+},
+“top_k”: 5,
+“similarity_threshold”: 0.7,
+“chunk_size”: 512,
+“chunk_overlap”: 50,
+“enable_reranking”: false
+}
+
+-----
+
+# Example 2: Pinecone with OpenAI Embeddings (Cloud)
+
+# config_pinecone.json
+
+{
+“backend_type”: “pinecone”,
+“embedding_provider”: “openai”,
+“embedding_model”: “text-embedding-3-small”,
+“collection_name”: “librechat-index”,
+“vector_store_config”: {
+“api_key”: “${PINECONE_API_KEY}”,
+“dimension”: 1536
+},
+“top_k”: 5,
+“similarity_threshold”: 0.75,
+“chunk_size”: 1000,
+“chunk_overlap”: 100,
+“enable_reranking”: true,
+“reranker_model”: “cross-encoder/ms-marco-MiniLM-L-6-v2”
+}
+
+-----
+
+# Example 3: Qdrant with Cohere Embeddings
+
+# config_qdrant.json
+
+{
+“backend_type”: “qdrant”,
+“embedding_provider”: “cohere”,
+“embedding_model”: “embed-english-v3.0”,
+“collection_name”: “librechat_collection”,
+“vector_store_config”: {
+“url”: “http://localhost:6333”,
+“api_key”: “${QDRANT_API_KEY}”
+},
+“top_k”: 10,
+“similarity_threshold”: 0.6,
+“chunk_size”: 800,
+“chunk_overlap”: 150,
+“enable_query_expansion”: true
+}
