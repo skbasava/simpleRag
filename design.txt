@@ -1,4 +1,38 @@
 
+where_params = []
+    for cond in self.conditions:
+        if cond == "project = %s":
+            where_params.append(self.filters["project"])
+        elif cond == "version = %s":
+            where_params.append(self.filters["version"])
+        elif cond == "mpu_name = %s":
+            where_params.append(self.filters["mpu_name"])
+        elif cond == "profile = %s":
+            where_params.append(self.filters["profile"])
+        elif cond == "addr_start <= %s":
+            where_params.append(effective_end)
+        elif cond == "addr_end >= %s":
+            where_params.append(addr_start)
+
+    # ---- final SQL ----
+    sql = f"""
+    {select_sql}
+    {where_clause}
+    {order_clause}
+    {limit_clause}
+    """.strip()
+
+    final_params = explain_params + where_params
+
+    # ---- defensive check ----
+    assert sql.count("%s") == len(final_params), (
+        f"SQL placeholders={sql.count('%s')} "
+        f"params={len(final_params)}"
+    )
+
+    return sql, final_params
+
+
 def explain_region_choice(
     row: dict,
     query_start: int | None,
