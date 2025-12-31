@@ -1,3 +1,21 @@
+def explain_region_choice(row, query_start, query_end, is_point):
+    if is_point:
+        return (
+            f"Address 0x{query_start:X} is covered by MPU region "
+            f"[0x{row['addr_start']:X}–0x{row['addr_end']:X}]. "
+            f"This region was selected because it is the most specific "
+            f"matching region (size={row['region_size']} bytes) "
+            f"with priority rg_index={row['rg_index']}."
+        )
+    else:
+        return (
+            f"Address range [0x{query_start:X}–0x{query_end:X}] overlaps "
+            f"with MPU region [0x{row['addr_start']:X}–0x{row['addr_end']:X}] "
+            f"(overlap size={row['effective_overlap_size']} bytes)."
+        )
+
+
+
 def build_explanation(row, facts):
     explanations = []
 
