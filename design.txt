@@ -1,3 +1,21 @@
+
+def _apply_version(self):
+    version = self.filters.get("version")
+
+    if version:
+        self.conditions.append("version = %s")
+        self.params.append(version)
+        return
+
+    # Version not provided → resolve latest
+    project = self.filters.get("project")
+    if project and self.version_resolver:
+        resolved = self.version_resolver(project)
+        if resolved:
+            self.conditions.append("version = %s")
+            self.params.append(resolved)
+
+
 def _sql_search(self, params: dict) -> list[dict]:
     """
     Executes deterministic SQL path and enriches rows with
