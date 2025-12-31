@@ -1,4 +1,62 @@
 
+def explain_region_choice(
+    row: dict,
+    query_start: int | None,
+    query_end: int | None,
+    is_point: bool,
+) -> str | None:
+    """
+    Generates explainability text STRICTLY from SQL-computed facts.
+
+    Defensive guarantees:
+    - No KeyError
+    - No hallucination
+    - No inference beyond SQL results
+    - Returns None if explainability is not justified
+    """
+
+    if not isinstance(row, dict):
+        return None
+
+    # Required base fields
+    addr_start = row.get("addr_start")
+    addr_end = row.get("addr_end")
+    rg_index = row.get("rg_index")
+
+    if addr_start is None or addr_end is None:
+        return None
+
+    # ---------- POINT ADDRESS QUERY ----------
+    if is_point:
+        covers = row.get("covers_address")
+        region_size = row.get("region_size")
+
+        if covers is not True or region_size is None:
+            return None
+
+        return (
+            f"Address 0x{query_start:X} is covered by MPU region "
+            f"[0x{addr_start:X}–0x{addr_end:X}]. "
+            f"This region was selected because it is the most specific match "
+            f"(region size = {region_size} bytes)"
+            + (f" with priority rg_index={rg_index}." if rg_index is not None else ".")
+        )
+
+    # ---------- RANGE ADDRESS QUERY ----------
+    overlap = row.get("effective_overlap_size")
+
+    if overlap is None or overlap <= 0:
+        return None
+
+    return (
+        f"Address range [0x{query_start:X}–0x{query_end:X}] overlaps with MPU region "
+        f"[0x{addr_start:X}–0x{addr_end:X}] "
+        f"(overlap size = {overlap} bytes)."
+    )
+
+
+
+
 def _apply_version(self):
     version = self.filters.get("version")
 
