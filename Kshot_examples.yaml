@@ -1,0 +1,41 @@
+kshots:
+  - id: address_point_lookup
+    description: Address-based MPU lookup
+    user_query: |
+      Explain the MPU policy at address 0x0EF01000 in KAANAPALLI version 5.3
+    sql_context:
+      - project: KAANAPALLI
+        version: 5.3
+        mpu_name: AOSS_PERIPH_MPU_XPU4
+        rg_index: 35
+        addr_start: 0x0EF01000
+        addr_end: 0x0EF02000
+        region_size: 4096
+        covers_address: true
+    answer: |
+      The address 0x0EF01000 is covered by MPU region AOSS_PERIPH_MPU_XPU4.
+      This region was selected because it is the smallest matching region
+      and has the highest priority (rg_index 35).
+
+  - id: missing_project
+    description: Missing project clarification
+    user_query: |
+      Explain the MPU policy at address 0x0EF01000
+    sql_context: []
+    answer: |
+      The project name is required to determine the MPU policy.
+      Please specify the project.
+
+  - id: address_range_query
+    description: Address range overlap
+    user_query: |
+      Which MPU policy applies between 0x0EF00000 and 0x0EF02000 in KAANAPALLI?
+    sql_context:
+      - mpu_name: AOSS_PERIPH_MPU_XPU4
+        addr_start: 0x0EF01000
+        addr_end: 0x0EF02000
+        effective_overlap_size: 4096
+    answer: |
+      The address range overlaps with MPU region AOSS_PERIPH_MPU_XPU4.
+      This region was selected due to the largest effective overlap
+      and highest priority.
