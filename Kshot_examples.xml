@@ -1,159 +1,221 @@
-<PolicyExamples>
-  <Version>5.3</Version>
+kshots:
 
-  <!-- ========================================================= -->
-  <!-- POSITIVE EXAMPLES (EXPECTED / VALID PATTERNS)             -->
-  <!-- ========================================================= -->
+# ============================================================
+# POSITIVE — ADDRESS POINT (SQL + Explainability)
+# ============================================================
+- id: region_lookup_point_basic
+  intent: REGION_LOOKUP
+  query_type: ADDRESS_POINT
+  requires_sql: true
+  requires_explain: true
+  confidence_level: high
+  constraints: [project, address]
+  example:
+    user: "Explain the MPU policy at address 0x10001000 in KAANAPALI"
+    assistant: |
+      Address 0x10001000 is covered by MPU region [0x10000000–0x10002000].
+      This region allows read and write access for privileged firmware.
+      It was selected because it is the smallest and highest-priority region covering the address.
+      Confidence: 0.97
 
-  <MPU name="AOPSS_MPU_XPU4" fqname="KAANAPALI.AOPSS_MPU_XPU4">
+# ============================================================
+# POSITIVE — ADDRESS RANGE
+# ============================================================
+- id: region_lookup_range
+  intent: REGION_LOOKUP
+  query_type: ADDRESS_RANGE
+  requires_sql: true
+  requires_explain: true
+  confidence_level: high
+  constraints: [project, address_range]
+  example:
+    user: "What MPU regions overlap address range 0x20000000–0x20008000 in KAANAPALI?"
+    assistant: |
+      The address range overlaps two MPU regions.
+      The primary region [0x20000000–0x20004000] is selected due to higher priority and smaller size.
+      Overlap size is 16384 bytes.
+      Confidence: 0.94
 
-    <PRTn
-      index="1"
-      profile="TME_FW"
-      start="0x69320000"
-      end="0x6932C000"
-      rdomains=""
-      wdomains=""
-      example_type="positive"
-    >
-      <XPU_Rgn_FLAGS enabled="true" static="false"/>
+# ============================================================
+# POSITIVE — VERSIONED QUERY
+# ============================================================
+- id: region_lookup_versioned
+  intent: REGION_LOOKUP
+  query_type: ADDRESS_POINT
+  requires_sql: true
+  requires_explain: true
+  confidence_level: high
+  constraints: [project, address, version]
+  example:
+    user: "Explain the MPU policy at 0x0EF01000 in KAANAPALI version 5.3"
+    assistant: |
+      In KAANAPALI version 5.3, address 0x0EF01000 maps to MPU region AOSS_PERIPH_MPU_XPU4.
+      The region permits read/write access and disallows execution.
+      Confidence: 0.98
 
-      <SecurityRationale>
-        TME_FW uses dynamic policy regions to lock firmware memory
-        during runtime to protect sensitive operations.
-      </SecurityRationale>
+# ============================================================
+# NEGATIVE — MISSING PROJECT (CLARIFY)
+# ============================================================
+- id: missing_project_clarify
+  intent: CLARIFY
+  query_type: MISSING_PROJECT
+  requires_sql: false
+  requires_explain: false
+  confidence_level: none
+  constraints: [address]
+  example:
+    user: "Explain the MPU policy at address 0x10001000"
+    assistant: |
+      I need the project name to proceed.
+      Please specify the target platform, for example: KAANAPALI or LAHAINA.
 
-      <SecurityRationalePoC>
-        TME-FW-OWNERS
-      </SecurityRationalePoC>
-    </PRTn>
+# ============================================================
+# NEGATIVE — INVALID ADDRESS
+# ============================================================
+- id: invalid_address
+  intent: INVALID_QUERY
+  query_type: INVALID_ADDRESS
+  requires_sql: false
+  requires_explain: false
+  confidence_level: none
+  example:
+    user: "Explain MPU policy at address ABCD1234"
+    assistant: |
+      The provided address is not a valid hexadecimal value.
+      Please provide an address in hexadecimal format, such as 0x10001000.
 
-    <PRTn
-      index="2"
-      profile="xBL_SC"
-      start="0x70000000"
-      end="0x7000FFFF"
-      rdomains=""
-      wdomains=""
-      example_type="positive"
-    >
-      <XPU_Rgn_FLAGS enabled="true" static="false"/>
+# ============================================================
+# NEGATIVE — NO REGION FOUND
+# ============================================================
+- id: no_region_found
+  intent: REGION_LOOKUP
+  query_type: ADDRESS_POINT
+  requires_sql: true
+  requires_explain: true
+  confidence_level: low
+  constraints: [project, address]
+  example:
+    user: "Explain the MPU policy at address 0xFFFFFFFF in KAANAPALI"
+    assistant: |
+      No MPU region in the database covers the specified address.
+      This address may be unmapped or unused.
+      Confidence: 0.25
 
-      <SecurityRationale>
-        xBL_SC downloads and authenticates boot images
-        before execution during early boot.
-      </SecurityRationale>
+# ============================================================
+# AMBIGUOUS — MULTIPLE REGION MATCHES
+# ============================================================
+- id: ambiguous_region_match
+  intent: REGION_LOOKUP
+  query_type: ADDRESS_POINT
+  requires_sql: true
+  requires_explain: true
+  confidence_level: medium
+  constraints: [project, address]
+  example:
+    user: "Explain MPU policy at address 0x30001000 in KAANAPALI"
+    assistant: |
+      The address matches multiple MPU regions.
+      The region with the smallest size and highest priority was selected.
+      Other overlapping regions exist and may apply depending on configuration.
+      Confidence: 0.78
 
-      <SecurityRationalePoC>
-        BOOT-SECURITY
-      </SecurityRationalePoC>
-    </PRTn>
+# ============================================================
+# POLICY CONFLICT DETECTION
+# ============================================================
+- id: policy_conflict_detected
+  intent: POLICY_CONFLICT
+  query_type: ADDRESS_POINT
+  requires_sql: true
+  requires_explain: true
+  confidence_level: medium
+  constraints: [project, address]
+  example:
+    user: "Check for MPU policy conflicts at address 0x40001000 in KAANAPALI"
+    assistant: |
+      Two MPU regions overlap with conflicting permissions.
+      One region allows execution while another denies execution.
+      Region priority determines the effective behavior.
+      Confidence: 0.72
 
-  </MPU>
+# ============================================================
+# LOW CONFIDENCE — PARTIAL METADATA
+# ============================================================
+- id: low_confidence_partial_data
+  intent: REGION_LOOKUP
+  query_type: ADDRESS_POINT
+  requires_sql: true
+  requires_explain: true
+  confidence_level: low
+  constraints: [project, address]
+  example:
+    user: "Explain MPU policy at address 0x50001000 in KAANAPALI"
+    assistant: |
+      The address partially overlaps an MPU region, but metadata is incomplete.
+      The explanation is derived from the closest matching region.
+      Confidence: 0.51
 
-  <MPU name="IPA_MPU" fqname="KAANAPALI.IPA_MPU">
+# ============================================================
+# TAG — TABLE ONLY QUERY (NO VECTOR)
+# ============================================================
+- id: tag_only_query
+  intent: TAG_LOOKUP
+  query_type: STRUCTURED_ONLY
+  requires_sql: true
+  requires_explain: false
+  confidence_level: high
+  constraints: [project]
+  example:
+    user: "List all MPU regions defined for KAANAPALI"
+    assistant: |
+      The following MPU regions are defined for KAANAPALI:
+      - AOSS_PERIPH_MPU_XPU4
+      - TME_FW_MPU
+      - LPASS_MPU
+      Confidence: 0.99
 
-    <PRTn
-      index="15"
-      profile="MSA"
-      start="0x0"
-      end="0xFFFFFFFF"
-      rdomains=""
-      wdomains=""
-      example_type="positive"
-    >
-      <XPU_Rgn_FLAGS enabled="true" static="false"/>
+# ============================================================
+# PURE LLM — GENERAL DOCUMENTATION (NO SQL, NO TAG)
+# ============================================================
+- id: mpu_general_explain
+  intent: GENERAL_EXPLANATION
+  query_type: NO_ADDRESS
+  requires_sql: false
+  requires_explain: false
+  confidence_level: high
+  example:
+    user: "What is an MPU and why is it used?"
+    assistant: |
+      A Memory Protection Unit (MPU) enforces access permissions on memory regions.
+      It helps isolate privileged and unprivileged code, improving system safety and reliability.
 
-      <SecurityRationale>
-        MSA profile spans the full addressable range
-        to enforce ownership and blanket protection.
-      </SecurityRationale>
+# ============================================================
+# NEGATIVE — OUT OF DOMAIN
+# ============================================================
+- id: out_of_domain
+  intent: OUT_OF_SCOPE
+  query_type: NON_MPU
+  requires_sql: false
+  requires_explain: false
+  confidence_level: none
+  example:
+    user: "What is the weather today in Bangalore?"
+    assistant: |
+      This system is designed to answer questions about MPU configurations and firmware security.
+      Please ask a question related to memory protection or platform configuration.
 
-      <SecurityRationalePoC>
-        PLATFORM-SECURITY
-      </SecurityRationalePoC>
-    </PRTn>
-
-  </MPU>
-
-  <!-- ========================================================= -->
-  <!-- NEGATIVE EXAMPLES (ANTI-PATTERNS / VIOLATIONS)            -->
-  <!-- ========================================================= -->
-
-  <MPU name="ANOC_IPA_XPU" fqname="KAANAPALI.ANOC_IPA_XPU">
-
-    <PRTn
-      index="0"
-      profile="MSA"
-      start="0xFFFFFFFF"
-      end="0xFFFFFFFF"
-      rdomains=""
-      wdomains=""
-      example_type="negative"
-    >
-      <XPU_Rgn_FLAGS enabled="true" static="true"/>
-
-      <SecurityRationale>
-        ANOC_IPA_XPU should not have a static policy region.
-        Static policy on IPA MPU violates access control guidelines.
-      </SecurityRationale>
-
-      <SecurityRationalePoC>
-        SECACCESS-4240
-      </SecurityRationalePoC>
-    </PRTn>
-
-  </MPU>
-
-  <MPU name="eNPU1_NoC" fqname="KAANAPALI.eNPU1_NoC">
-
-    <PRTn
-      index="39"
-      profile="TME_FW"
-      start="0x69320000"
-      end="0x6932C000"
-      rdomains=""
-      wdomains=""
-      example_type="negative"
-    >
-      <XPU_Rgn_FLAGS enabled="true" static="false"/>
-
-      <SecurityRationale>
-        Insufficient region slots were available.
-        Policy was collapsed into an existing TME_FW region,
-        reducing isolation guarantees.
-      </SecurityRationale>
-
-      <SecurityRationalePoC>
-        RG-EXHAUSTION
-      </SecurityRationalePoC>
-    </PRTn>
-
-  </MPU>
-
-  <MPU name="DEBUG_MPU" fqname="KAANAPALI.DEBUG_MPU">
-
-    <PRTn
-      index="3"
-      profile="DEBUG"
-      start="0x80000000"
-      end="0x8FFFFFFF"
-      rdomains=""
-      wdomains=""
-      example_type="negative"
-    >
-      <XPU_Rgn_FLAGS enabled="true" static="true"/>
-
-      <SecurityRationale>
-        Debug profile with static policy exposes sensitive memory
-        and should never be enabled in production builds.
-      </SecurityRationale>
-
-      <SecurityRationalePoC>
-        DEBUG-LEAK
-      </SecurityRationalePoC>
-    </PRTn>
-
-  </MPU>
-
-</PolicyExamples>
+# ============================================================
+# CONFIDENCE-ONLY RESPONSE
+# ============================================================
+- id: confidence_only
+  intent: REGION_LOOKUP
+  query_type: ADDRESS_POINT
+  requires_sql: true
+  requires_explain: true
+  confidence_level: low
+  constraints: [project, address]
+  example:
+    user: "Explain MPU policy at address 0x60001000 in KAANAPALI"
+    assistant: |
+      A matching MPU region was identified, but confidence is low due to limited metadata.
+      Use this information with caution.
+      Confidence: 0.43
