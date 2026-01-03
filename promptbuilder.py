@@ -1,6 +1,73 @@
+
+
+
 from kshot_loader import load_kshot_examples
 from kshot_renderer import render_kshots
 from sql_context import build_sql_context
+
+
+import yaml
+from typing import List, Dict
+
+
+def load_kshot_examples(path: str) -> str:
+    with open(path, "r") as f:
+        data = yaml.safe_load(f)
+
+    blocks = []
+    for ex in data.get("examples", []):
+        blocks.append(
+            f"### Example\n"
+            f"User: {ex['user']}\n"
+            f"Answer: {ex['assistant']}\n"
+        )
+    return "\n".join(blocks)
+
+
+def build_sql_context(sql_rows: List[Dict]) -> str:
+    if not sql_rows:
+        return "No matching policy entries found."
+
+    lines = []
+    for r in sql_rows:
+        lines.append(
+            f"- Project: {r['project']}, Version: {r['version']}\n"
+            f"  MPU: {r['mpu_name']} (Region {r['rg_index']})\n"
+            f"  Address Range: {r['addr_start']} - {r['addr_end']}\n"
+            f"  Covers Address: {r.get('covers_address', 'unknown')}\n"
+        )
+    return "\n".join(lines)
+
+
+def build_final_prompt(
+    user_query: str,
+    hyde_text: str,
+    sql_rows: List[Dict],
+    kshot_yaml_path: str,
+) -> str:
+    kshot_block = load_kshot_examples(kshot_yaml_path)
+    sql_context = build_sql_context(sql_rows)
+
+    return f"""
+You are a security policy analysis assistant.
+Answer strictly using the provided context.
+Do not hallucinate MPU names, address ranges, or projects.
+
+{f"K-SHOT EXAMPLES:\n{kshot_block}" if kshot_block else ""}
+
+CONTEXT (Authoritative Data):
+{sql_context}
+
+HyDE Interpretation:
+{hyde_text}
+
+USER QUESTION:
+{user_query}
+
+Provide a precise, technically accurate answer.
+""".strip()
+
+
 
 def build_final_prompt(
     *,
