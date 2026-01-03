@@ -1,3 +1,24 @@
+prompt = build_final_prompt(
+    user_query="Give me MPU policy details for address 0x0EF01000 in KAANAPALLI",
+    hyde_text="User is requesting MPU policy for a specific address in a project.",
+    sql_rows=[
+        {
+            "project": "KAANAPALLI",
+            "version": "5.3",
+            "mpu_name": "AOSS_PERIPH_MPU_XPU4",
+            "rg_index": 35,
+            "addr_start": "0x0EF01000",
+            "addr_end": "0x0EF02000",
+            "region_size": 4096,
+            "covers_address": True,
+        }
+    ],
+    kshot_yaml_path="kshot_examples.yaml",
+)
+
+print(prompt)
+
+
 
 import yaml
 from pathlib import Path
