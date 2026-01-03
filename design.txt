@@ -1,3 +1,112 @@
+import yaml
+from pathlib import Path
+from typing import List, Dict
+
+
+class KShotExample:
+    def __init__(self, raw: Dict):
+        self.id = raw["id"]
+        self.intent = raw["intent"]
+        self.query_type = raw.get("query_type")
+        self.requires_sql = raw.get("requires_sql", False)
+        self.requires_explain = raw.get("requires_explain", False)
+        self.priority = raw.get("priority", 0)
+        self.example = raw["example"]
+
+    def matches(self, *, intent, query_type, requires_sql):
+        if self.intent != intent:
+            return False
+        if self.query_type and self.query_type != query_type:
+            return False
+        if self.requires_sql and not requires_sql:
+            return False
+        return True
+
+
+from typing import List
+from .kshots import KShotExample
+
+
+def select_kshots(
+    *,
+    kshots: List[KShotExample],
+    intent: str,
+    query_type: str,
+    requires_sql: bool,
+    k: int = 3
+) -> List[KShotExample]:
+
+    matched = [
+        ks for ks in kshots
+        if ks.matches(
+            intent=intent,
+            query_type=query_type,
+            requires_sql=requires_sql
+        )
+    ]
+
+    # Sort by priority (descending)
+    matched.sort(key=lambda x: x.priority, reverse=True)
+
+    return matched[:k]
+
+
+def render_kshot(text: str, context: dict) -> str:
+    for key in context:
+        placeholder = "{{" + key + "}}"
+        text = text.replace(placeholder, str(context[key]))
+    return text
+
+
+def build_prompt(
+    *,
+    user_query: str,
+    sql_context: str,
+    kshots: list,
+    runtime_context: dict
+) -> str:
+
+    rendered_kshots = []
+
+    for ks in kshots:
+        rendered_kshots.append(
+            f"User:\n{render_kshot(ks.example['user'], runtime_context)}\n"
+            f"Assistant:\n{render_kshot(ks.example['assistant'], runtime_context)}"
+        )
+
+    return f"""
+You are a firmware security assistant.
+
+### Examples
+{chr(10).join(rendered_kshots)}
+
+### Retrieved Data
+{sql_context}
+
+### User Question
+{user_query}
+
+Answer using only the retrieved data.
+Include a confidence score.
+"""
+
+
+
+
+
+
+def load_kshots(path: str) -> List[KShotExample]:
+    with open(path, "r") as f:
+        data = yaml.safe_load(f)
+
+    return [KShotExample(ks) for ks in data.get("kshots", [])]
+
+
+
+
+
+
+
 prompt = build_final_prompt(
     user_query="Give me MPU policy details for address 0x0EF01000 in KAANAPALLI",
     hyde_text="User is requesting MPU policy for a specific address in a project.",
