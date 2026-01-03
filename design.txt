@@ -1,3 +1,40 @@
+
+def _build_final_prompt(self, ...):
+    logger.info("Entering _build_final_prompt()")
+
+    logger.info("Inputs:")
+    logger.info("  user_query=%r", user_query)
+    logger.info("  hyde_text is None? %s", hyde_text is None)
+    logger.info("  sql_rows is None? %s", sql_rows is None)
+    logger.info("  kshots is None? %s", kshots is None)
+
+    prompt = build_prompt(...)
+
+    logger.info(
+        "Exiting _build_final_prompt(): prompt type=%s",
+        type(prompt)
+    )
+    return prompt
+
+logger.info("build_prompt() called")
+logger.info("  user_query=%r", user_query)
+logger.info("  sql_context is None? %s", sql_context is None)
+logger.info("  runtime_context=%s", runtime_context)
+logger.info("  kshots=%s", kshots)
+
+final_prompt = "\n\n".join([...])
+
+logger.info(
+    "build_prompt() returning type=%s, length=%s",
+    type(final_prompt),
+    len(final_prompt) if isinstance(final_prompt, str) else None
+)
+
+return final_prompt
+
+
+
+
 def format_sql_rows(sql_rows: list[dict]) -> str:
     if not sql_rows:
         return "No SQL data was retrieved."
