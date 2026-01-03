@@ -1,4 +1,54 @@
 
+def _build_runtime_context(self, query_facts, sql_rows):
+    """
+    Build a dict of resolved runtime values for K-shot rendering.
+    Assumes sql_rows is already filtered to the best row (LIMIT 1).
+    """
+
+    ctx = {
+        # user / intent
+        "intent": query_facts.intent,
+        "project": query_facts.project,
+        "version": query_facts.version,
+        "profile": query_facts.profile,
+
+        # address semantics
+        "addr_start": query_facts.addr_start,
+        "addr_end": query_facts.addr_end,
+        "is_point": query_facts.addr_end is None,
+    }
+
+    # No SQL rows → context is intentionally partial
+    if not sql_rows:
+        return ctx
+
+    row = sql_rows[0]
+
+    # MPU / region facts
+    ctx.update({
+        "mpu_name": row.get("mpu_name"),
+        "rg_index": row.get("rg_index"),
+        "region_size": row.get("region_size"),
+        "covers_address": row.get("covers_address"),
+
+        "addr_start_region": row.get("addr_start"),
+        "addr_end_region": row.get("addr_end"),
+    })
+
+    # Presentation-safe fields (for K-shots)
+    if query_facts.addr_start is not None:
+        ctx["address_hex"] = hex(query_facts.addr_start)
+
+    if row.get("addr_start") is not None:
+        ctx["addr_start_hex"] = hex(row["addr_start"])
+
+    if row.get("addr_end") is not None:
+        ctx["addr_end_hex"] = hex(row["addr_end"])
+
+    return ctx
+
+
+
 def build_prompt(
     *,
     user_query: str,
