@@ -1,4 +1,54 @@
 
+import yaml
+from pathlib import Path
+
+def load_kshot_examples(
+    path: str | Path,
+    max_examples: int | None = None,
+) -> list[dict]:
+    path = Path(path)
+    with path.open("r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    shots = data.get("kshots", [])
+    if max_examples is not None:
+        shots = shots[:max_examples]
+    return shots
+
+def build_sql_context(rows: list[dict]) -> str:
+    if not rows:
+        return "SQL Context:\n(empty)"
+
+    lines = ["SQL Context:"]
+    for i, row in enumerate(rows, start=1):
+        lines.append(f"\nRegion {i}:")
+        for key, value in row.items():
+            if value is None:
+                continue
+            lines.append(f"- {key}: {value}")
+    return "\n".join(lines)
+
+def render_kshots(kshots: list[dict]) -> str:
+    blocks = []
+    for shot in kshots:
+        block = f"""
+### K-SHOT EXAMPLE: {shot.get("description")}
+
+User Query:
+{shot.get("user_query")}
+
+SQL Context:
+{shot.get("sql_context")}
+
+Answer:
+{shot.get("answer")}
+""".strip()
+        blocks.append(block)
+
+    return "\n\n".join(blocks)
+
+
+
 where_params = []
     for cond in self.conditions:
         if cond == "project = %s":
