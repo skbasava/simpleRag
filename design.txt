@@ -1,3 +1,20 @@
+def format_sql_rows(sql_rows: list[dict]) -> str:
+    if not sql_rows:
+        return "No SQL data was retrieved."
+
+    lines = []
+    for row in sql_rows:
+        lines.append(
+            f"- Project={row.get('project')}, "
+            f"Version={row.get('version')}, "
+            f"MPU={row.get('mpu_name')}, "
+            f"Region=[0x{row.get('addr_start'):X}–0x{row.get('addr_end'):X}], "
+            f"Profile={row.get('profile')}"
+        )
+    return "\n".join(lines)
+
+
+
 
 def _build_runtime_context(self, query_facts, sql_rows):
     """
