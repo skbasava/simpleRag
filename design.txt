@@ -1,3 +1,56 @@
+
+def build_prompt(
+    *,
+    user_query: str,
+    sql_context: Optional[str],
+    kshots: List[KShotTemplate],
+    runtime_context: Dict[str, Any],
+    system_preamble: str = "You are a security Access control policy maker and decoder assistant.",
+    require_confidence: bool = True,
+) -> str:
+    """
+    Compose the final prompt using selected k-shots, SQL/TAG context, and the user query.
+    """
+
+    system_block = f"""
+{system_preamble}
+
+You are an MPU policy analysis assistant.
+
+Rules:
+- Use ONLY the provided SQL Context for factual claims.
+- Never invent MPU regions, addresses, or permissions.
+- If required information is missing, ask a clarification question.
+- Always explain WHY a region was chosen.
+"""
+
+    rendered_kshots: List[str] = []
+    for ks in kshots:
+        rendered_kshots.append(
+            "Q: " + render_kshot(ks.example["user"], runtime_context) + "\n" +
+            "A: " + render_kshot(ks.example["assistant"], runtime_context)
+        )
+
+    examples_block = "\n\n".join(rendered_kshots)
+    sql_block = sql_context if sql_context else "No SQL data was retrieved."
+
+    confidence_line = "\nInclude a confidence score." if require_confidence else ""
+
+    return "\n\n".join([
+        system_block.strip(),
+        "### Examples",
+        examples_block,
+        "### Retrieved Data",
+        sql_block,
+        "### User Question",
+        user_query,
+        "Answer using only the retrieved data." + confidence_line,
+    ])
+
+
+
+
+
 import yaml
 from pathlib import Path
 from typing import List, Dict
