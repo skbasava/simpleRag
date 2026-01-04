@@ -1,4 +1,28 @@
 
+curl -X POST http://localhost:6000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tag-service",
+    "messages": [
+      { "role": "user", "content": "Explain what is quantum computing" }
+    ]
+  }'
+
+curl -X POST http://localhost:6000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tag-service",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Give me MPU access details for address 0x0EF01000 in project KAANAPALI"
+      }
+    ]
+  }'
+
+
+
+
 def _build_final_prompt(self, ...):
     logger.info("Entering _build_final_prompt()")
 
