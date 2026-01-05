@@ -1,0 +1,99 @@
+# ================================
+# LibreChat Core Configuration
+# ================================
+
+version: 1.0.0
+environment: production
+
+server:
+  port: 3080
+  host: 0.0.0.0
+  trustProxy: true
+
+ui:
+  defaultTheme: dark
+  showModelPicker: true
+  enableSystemMessages: true
+
+logging:
+  level: info
+
+# ================================
+# Authentication (example)
+# ================================
+
+auth:
+  enableRegistration: false
+  enableLogin: true
+  session:
+    secret: "${LIBRECHAT_SESSION_SECRET}"
+
+# ================================
+# Model Providers
+# ================================
+
+models:
+
+  # --------------------------------
+  # TAG Production RAG Service
+  # --------------------------------
+  tag-rag:
+    provider: openai
+    label: "TAG Policy RAG"
+    baseURL: "http://rag-service:6000/v1"   # use service name in docker
+    apiKey: "DUMMY_KEY"                     # required but unused
+    models:
+      - tag-service
+    defaultModel: tag-service
+
+    # System prompt injected automatically
+    systemPrompt: |
+      You are TAG, an intelligent policy analysis assistant.
+
+      Core rules:
+      - If the user asks about policies, registers, addresses, MPU, memory maps, access rules, or project-specific data, use internal knowledge retrieval.
+      - If the user asks for explanations, summaries, design rationale, or conceptual understanding, respond naturally.
+      - Never expose internal SQL, embeddings, or routing logic.
+      - Be precise, structured, and factual.
+      - If information is unavailable, clearly say so.
+
+    # Temperature & tokens are advisory (TAG may override internally)
+    temperature: 0.2
+    maxTokens: 2048
+    stream: false
+
+    # Safety timeout for production
+    timeout: 120000
+
+# ================================
+# Default Model Routing
+# ================================
+
+defaultModel: tag-service
+
+# ================================
+# Rate Limiting
+# ================================
+
+rateLimit:
+  windowMs: 60000
+  maxRequests: 120
+
+# ================================
+# UI Presets
+# ================================
+
+presets:
+  - name: "TAG – Policy Analysis"
+    description: "Use TAG RAG system for policy queries and explanations"
+    model: tag-service
+    temperature: 0.2
+
+# ================================
+# Network / CORS (if needed)
+# ================================
+
+cors:
+  enabled: true
+  origins:
+    - "*"
