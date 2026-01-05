@@ -1,4 +1,31 @@
 
+Hi Team,
+
+I’d like to schedule a review meeting to walk through the RAG-based Policy Analysis tool we’ve been building and gather your feedback.
+
+Objective of the meeting:
+- Review how the tool supports policy analysis and interpretation
+- Evaluate the ease of use from a user and reviewer perspective
+- Walk through the end-to-end flow (intent detection → retrieval → reasoning)
+- Discuss gaps, improvements, and next steps for adoption
+
+Proposed agenda:
+1. Brief overview of the problem statement and goals  
+2. Demo of the RAG workflow with real policy queries  
+3. User experience and usability discussion  
+4. Feedback, concerns, and recommendations  
+5. Alignment on next actions
+
+Proposed duration: 45–60 minutes  
+Participants: Policy, engineering, and stakeholder representatives
+
+Please let me know your availability and any specific areas you’d like us to focus on during the session. I’ll send out a calendar invite accordingly.
+
+Looking forward to your inputs and guidance.
+
+Best regards,  
+Satish Aradhya
+
 curl -X POST http://localhost:6000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
