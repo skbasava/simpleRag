@@ -1,7 +1,3 @@
-# ================================
-# LibreChat Core Configuration
-# ================================
-
 version: 1.0.0
 environment: production
 
@@ -19,9 +15,8 @@ logging:
   level: info
 
 # ================================
-# Authentication (example)
+# Authentication
 # ================================
-
 auth:
   enableRegistration: false
   enableLogin: true
@@ -31,68 +26,56 @@ auth:
 # ================================
 # Model Providers
 # ================================
-
 models:
+  openai:
+    tag-rag:
+      label: "TAG Policy RAG"
+      endpoint: openai
+      baseURL: "http://rag-service:6000/v1"
+      apiKey: "DUMMY_KEY"
 
-  # --------------------------------
-  # TAG Production RAG Service
-  # --------------------------------
-  tag-rag:
-    provider: openai
-    label: "TAG Policy RAG"
-    baseURL: "http://rag-service:6000/v1"   # use service name in docker
-    apiKey: "DUMMY_KEY"                     # required but unused
-    models:
-      - tag-service
-    defaultModel: tag-service
+      models:
+        tag-service:
+          label: "TAG Policy Engine"
+          maxContextTokens: 4096
+          maxTokens: 2048
+          temperature: 0.2
+          stream: false
+          timeout: 120000
 
-    # System prompt injected automatically
+# ================================
+# Default Model
+# ================================
+defaultModel: openai:tag-rag:tag-service
+
+# ================================
+# UI Presets (SYSTEM PROMPT LIVES HERE)
+# ================================
+presets:
+  - name: "TAG – Policy Analysis"
+    description: "Policy analysis, MPU, registers, access rules, memory maps"
+    model: openai:tag-rag:tag-service
+    temperature: 0.2
     systemPrompt: |
       You are TAG, an intelligent policy analysis assistant.
 
       Core rules:
-      - If the user asks about policies, registers, addresses, MPU, memory maps, access rules, or project-specific data, use internal knowledge retrieval.
-      - If the user asks for explanations, summaries, design rationale, or conceptual understanding, respond naturally.
-      - Never expose internal SQL, embeddings, or routing logic.
+      - Answer policy, register, address, MPU, memory-map, and project-specific queries using retrieved data.
+      - For conceptual or explanatory questions, respond naturally and clearly.
+      - Never expose SQL queries, embeddings, vector stores, or routing logic.
       - Be precise, structured, and factual.
-      - If information is unavailable, clearly say so.
-
-    # Temperature & tokens are advisory (TAG may override internally)
-    temperature: 0.2
-    maxTokens: 2048
-    stream: false
-
-    # Safety timeout for production
-    timeout: 120000
-
-# ================================
-# Default Model Routing
-# ================================
-
-defaultModel: tag-service
+      - If information is unavailable, say so explicitly.
 
 # ================================
 # Rate Limiting
 # ================================
-
 rateLimit:
   windowMs: 60000
   maxRequests: 120
 
 # ================================
-# UI Presets
+# CORS
 # ================================
-
-presets:
-  - name: "TAG – Policy Analysis"
-    description: "Use TAG RAG system for policy queries and explanations"
-    model: tag-service
-    temperature: 0.2
-
-# ================================
-# Network / CORS (if needed)
-# ================================
-
 cors:
   enabled: true
   origins:
