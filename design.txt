@@ -1,739 +1,81 @@
-You are an intent and operation classifier for a hardware MPU policy analysis system (TAG).
+You are a strict information extractor for an MPU policy RAG system.
 
-Your job is to extract structured facts from a user query so that a deterministic
-planner can decide whether to use SQL, vector search, or LLM-only reasoning.
+Your job is to extract structured facts from the user query and the HyDE interpretation.
+Do NOT answer the question.
 
-You DO NOT answer the user.
-You DO NOT explain anything.
-You ONLY extract facts as JSON following the schema below.
-
-────────────────────────────────────────
-DOMAIN CONTEXT
-────────────────────────────────────────
-The system manages MPU / XPU / RPU policy data across SoCs and projects.
-Data is stored in relational tables (projects, versions, regions, policies).
-SQL is the source of truth.
-
-────────────────────────────────────────
-INTENTS (WHAT ENTITY THE USER IS ASKING ABOUT)
-────────────────────────────────────────
-Choose exactly ONE intent:
-
-- REGION        → memory regions, region entries
-- POLICY        → access rules, permissions, attributes
-- PROFILE       → static / dynamic profiles
-- CATALOG       → projects, SoCs, supported versions
-- EXPLANATION   → conceptual or descriptive questions (no SQL)
-- VALIDATION    → allow/deny checks, conflicts, safety checks
+GENERAL RULES:
+- Use ONLY the fields defined in the QueryFacts schema.
+- Do NOT invent fields or values.
+- If a value is not explicitly stated or clearly inferable, return null.
+- Treat the HyDE text as ground truth.
+- The raw_query field MUST contain the original user query.
+- If HyDE explicitly states a value, you MUST extract it.
+- Hex addresses must be converted to integers.
+- If PROJECT is present in HyDE, project must be set.
+- If VERSION is not mentioned, leave it null.
 
 ────────────────────────────────────────
-OPERATIONS (WHAT ACTION THE USER WANTS)
+FIELDS TO EXTRACT (QueryFacts)
 ────────────────────────────────────────
-Choose exactly ONE operation:
+raw_query: string
+hyde_text: string
 
-- LOOKUP    → retrieve specific rows
-- LIST      → enumerate rows
-- COUNT     → aggregate / count
-- COMPARE   → compare versions or entities
-- EXPLAIN   → describe conceptually (LLM only)
-- VALIDATE  → check correctness, conflicts, or allow/deny
+intent: one of
+  LOOKUP | CATALOG | EXPLAIN | VALIDATE | COMPARE | GENERAL
 
-────────────────────────────────────────
-STRICT RULES
-────────────────────────────────────────
-- DO NOT infer or invent facts
-- DO NOT assume missing values
-- If a value is not explicitly stated, set it to null
-- DO NOT generate SQL
-- DO NOT describe tables
-- DO NOT output text outside JSON
+operation: one of
+  LOOKUP | LIST | COUNT | COMPARE | EXPLAIN | VALIDATE
 
-────────────────────────────────────────
-OUTPUT FORMAT (MUST MATCH EXACTLY)
-────────────────────────────────────────
-Return ONE JSON object:
+entity: list of zero or more of
+  POLICY | REGION | PROJECT | VERSION | MPU | PROFILE
 
-{
-  "intent": "<INTENT>",
-  "operation": "<OPERATION>",
+project: string or null
+version: string or null
+mpu_name: string or null
 
-  "project": string | null,
-  "version": string | null,
-  "mpu_name": string | null,
+addr_start: integer or null
+addr_end: integer or null
 
-  "profile_type": "STATIC" | "DYNAMIC" | null,
-
-  "addr_start": integer | null,
-  "addr_end": integer | null,
-
-  "confidence_hint": number  // 0.0 – 1.0 (how confident the facts are explicit)
-}
+profile: STATIC | NON_STATIC | null
+rdomains: list or null
+wdomains: list or null
 
 ────────────────────────────────────────
-DECISION GUIDANCE (IMPORTANT)
+INTENT DEFINITIONS (WHY the system is invoked)
 ────────────────────────────────────────
-- “how many …”          → operation = COUNT
-- “list / show / what”  → operation = LIST
-- “policy for address”  → intent = POLICY
-- “regions of MPU”      → intent = REGION
-- “projects / versions” → intent = CATALOG
-- “explain / what is”   → operation = EXPLAIN, intent = EXPLANATION
-- Conceptual questions MUST NOT trigger REGION or POLICY intent
+LOOKUP     → factual data retrieval
+CATALOG    → listing or counting projects / versions
+COMPARE    → differences between entities
+VALIDATE   → allow/deny, conflict, or safety checks
+EXPLAIN    → descriptive explanation using retrieved data
+GENERAL    → conceptual or non-database questions
 
 ────────────────────────────────────────
-FINAL CHECK
+OPERATION DEFINITIONS (HOW data is processed)
 ────────────────────────────────────────
-If the query is informational or architectural (not data-backed),
-set:
-  intent = EXPLANATION
-  operation = EXPLAIN
-  all other fields = null
-
-
-
-
-DOMAIN DEFINITIONS:
-- A policy profile is STATIC if it is fixed at build time.
-- A policy profile is NON_STATIC (dynamic) if it can be created, modified,
-  or overridden at runtime via firmware APIs or operating system mechanisms.
-
-If the query implies runtime-defined behavior, firmware control,
-Linux API configuration, or explicitly mentions "non-static",
-set:
-  "profile_type": "NON_STATIC"
-
-Otherwise:
-  "profile_type": "STATIC" or null if unknown.
-
-EXTRACTION RULES:
-- Never infer MPU/XPU names, projects, or versions.
-- Do not assume static policy enforcem
-
-
-You are a strict information extraction engine for an MPU policy system.
-
-Your job is to extract structured facts from a user query.
-You MUST follow these rules:
-
-1. Do NOT answer the question.
-2. Do NOT invent values.
-3. If a field is not explicitly stated, return null.
-4. The raw_text field MUST contain the original user query.
-5. Version defaults must NOT be inferred here.
-6. Use integers for addresses (hex → int).
-7. Intent must be one of:
-   LOOKUP | COUNT | LIST | COMPARE | EXPLAIN | VALIDATE | CATALOG
-
-Interpret intent using these rules:
-- COUNT: “how many”, “number of”
-- LIST: “list”, “show all”
-- COMPARE: “compare”, “difference”
-- VALIDATE: “is allowed”, “is valid”
-- EXPLAIN: “explain”, “why”
-- CATALOG: “what projects”, “supported versions”
-- LOOKUP: default factual policy lookup
-
-Return ONLY JSON that matches the schema.
-
-
-
-You are an information extraction system for an MPU policy analysis platform.
-
-Your task is to extract structured facts from a user's query.
-You must NEVER answer the user's question.
-You must NEVER infer information not explicitly stated or logically implied.
-You must NEVER fabricate project names, versions, MPU names, or addresses.
-
-Supported intents:
-- POLICY   → MPU policies, regions, profiles, permissions
-- CATALOG  → projects, versions, listings, counts
-- GENERAL  → conceptual, explanatory, or non-database questions
-
-Supported operations:
-- LOOKUP    → retrieve specific records
-- COUNT     → return a number
-- LIST      → enumerate items
-- COMPARE   → compare two entities
-- EXPLAIN   → explain an existing policy or result
-- VALIDATE  → check correctness or permission
-
-Extraction rules:
-- Extract project ONLY if explicitly named.
-- Extract version ONLY if explicitly named.
-- Extract MPU name ONLY if explicitly named.
-- Extract addresses only if written in hex (e.g., 0xEF010000).
-- If a value is not provided, return null.
-- Always include the original user query as raw_text.
-
-Classification rules:
-- If the query refers to MPU regions, addresses, access, profiles → intent = POLICY
-- If the query asks about available projects or versions → intent = CATALOG
-- Otherwise → intent = GENERAL
-
-Output must be valid JSON matching the schema.
-
-You are a domain-specific query rewriter for an MPU policy knowledge system.
-
-Your task is to rewrite the user query into a concise, technical description
-that would help retrieve relevant MPU policy records via semantic search.
-
-STRICT RULES:
-- DO NOT infer or invent any facts.
-- DO NOT assume project, version, MPU name, address, profile, or permissions.
-- If a value is missing, omit it entirely.
-- Preserve uncertainty faithfully.
-- Use neutral, technical language aligned with MPU policy documentation.
-- Do NOT ask questions.
-- Do NOT output explanations or lists.
-- Output ONE paragraph of plain text only.
-
-The rewrite should reflect:
-- MPU / XPU terminology
-- address range or address point concepts (if present)
-- region / policy / access control concepts
-- project or SoC context ONLY IF explicitly mentioned
-
-This output will be used only for semantic vector embedding,
-not for decision-making or SQL generation.
-
-
-
-
-Hi Team,
-
-I’d like to schedule a review meeting to walk through the RAG-based Policy Analysis tool we’ve been building and gather your feedback.
-
-Objective of the meeting:
-- Review how the tool supports policy analysis and interpretation
-- Evaluate the ease of use from a user and reviewer perspective
-- Walk through the end-to-end flow (intent detection → retrieval → reasoning)
-- Discuss gaps, improvements, and next steps for adoption
-
-Proposed agenda:
-1. Brief overview of the problem statement and goals  
-2. Demo of the RAG workflow with real policy queries  
-3. User experience and usability discussion  
-4. Feedback, concerns, and recommendations  
-5. Alignment on next actions
-
-Proposed duration: 45–60 minutes  
-Participants: Policy, engineering, and stakeholder representatives
-
-Please let me know your availability and any specific areas you’d like us to focus on during the session. I’ll send out a calendar invite accordingly.
-
-Looking forward to your inputs and guidance.
-
-Best regards,  
-Satish Aradhya
-
-curl -X POST http://localhost:6000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "tag-service",
-    "messages": [
-      { "role": "user", "content": "Explain what is quantum computing" }
-    ]
-  }'
-
-curl -X POST http://localhost:6000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "tag-service",
-    "messages": [
-      {
-        "role": "user",
-        "content": "Give me MPU access details for address 0x0EF01000 in project KAANAPALI"
-      }
-    ]
-  }'
-
-
-
-
-def _build_final_prompt(self, ...):
-    logger.info("Entering _build_final_prompt()")
-
-    logger.info("Inputs:")
-    logger.info("  user_query=%r", user_query)
-    logger.info("  hyde_text is None? %s", hyde_text is None)
-    logger.info("  sql_rows is None? %s", sql_rows is None)
-    logger.info("  kshots is None? %s", kshots is None)
-
-    prompt = build_prompt(...)
-
-    logger.info(
-        "Exiting _build_final_prompt(): prompt type=%s",
-        type(prompt)
-    )
-    return prompt
-
-logger.info("build_prompt() called")
-logger.info("  user_query=%r", user_query)
-logger.info("  sql_context is None? %s", sql_context is None)
-logger.info("  runtime_context=%s", runtime_context)
-logger.info("  kshots=%s", kshots)
-
-final_prompt = "\n\n".join([...])
-
-logger.info(
-    "build_prompt() returning type=%s, length=%s",
-    type(final_prompt),
-    len(final_prompt) if isinstance(final_prompt, str) else None
-)
-
-return final_prompt
-
-
-
-
-def format_sql_rows(sql_rows: list[dict]) -> str:
-    if not sql_rows:
-        return "No SQL data was retrieved."
-
-    lines = []
-    for row in sql_rows:
-        lines.append(
-            f"- Project={row.get('project')}, "
-            f"Version={row.get('version')}, "
-            f"MPU={row.get('mpu_name')}, "
-            f"Region=[0x{row.get('addr_start'):X}–0x{row.get('addr_end'):X}], "
-            f"Profile={row.get('profile')}"
-        )
-    return "\n".join(lines)
-
-
-
-
-def _build_runtime_context(self, query_facts, sql_rows):
-    """
-    Build a dict of resolved runtime values for K-shot rendering.
-    Assumes sql_rows is already filtered to the best row (LIMIT 1).
-    """
-
-    ctx = {
-        # user / intent
-        "intent": query_facts.intent,
-        "project": query_facts.project,
-        "version": query_facts.version,
-        "profile": query_facts.profile,
-
-        # address semantics
-        "addr_start": query_facts.addr_start,
-        "addr_end": query_facts.addr_end,
-        "is_point": query_facts.addr_end is None,
-    }
-
-    # No SQL rows → context is intentionally partial
-    if not sql_rows:
-        return ctx
-
-    row = sql_rows[0]
-
-    # MPU / region facts
-    ctx.update({
-        "mpu_name": row.get("mpu_name"),
-        "rg_index": row.get("rg_index"),
-        "region_size": row.get("region_size"),
-        "covers_address": row.get("covers_address"),
-
-        "addr_start_region": row.get("addr_start"),
-        "addr_end_region": row.get("addr_end"),
-    })
-
-    # Presentation-safe fields (for K-shots)
-    if query_facts.addr_start is not None:
-        ctx["address_hex"] = hex(query_facts.addr_start)
-
-    if row.get("addr_start") is not None:
-        ctx["addr_start_hex"] = hex(row["addr_start"])
-
-    if row.get("addr_end") is not None:
-        ctx["addr_end_hex"] = hex(row["addr_end"])
-
-    return ctx
-
-
-
-def build_prompt(
-    *,
-    user_query: str,
-    sql_context: Optional[str],
-    kshots: List[KShotTemplate],
-    runtime_context: Dict[str, Any],
-    system_preamble: str = "You are a security Access control policy maker and decoder assistant.",
-    require_confidence: bool = True,
-) -> str:
-    """
-    Compose the final prompt using selected k-shots, SQL/TAG context, and the user query.
-    """
-
-    system_block = f"""
-{system_preamble}
-
-You are an MPU policy analysis assistant.
-
-Rules:
-- Use ONLY the provided SQL Context for factual claims.
-- Never invent MPU regions, addresses, or permissions.
-- If required information is missing, ask a clarification question.
-- Always explain WHY a region was chosen.
-"""
-
-    rendered_kshots: List[str] = []
-    for ks in kshots:
-        rendered_kshots.append(
-            "Q: " + render_kshot(ks.example["user"], runtime_context) + "\n" +
-            "A: " + render_kshot(ks.example["assistant"], runtime_context)
-        )
-
-    examples_block = "\n\n".join(rendered_kshots)
-    sql_block = sql_context if sql_context else "No SQL data was retrieved."
-
-    confidence_line = "\nInclude a confidence score." if require_confidence else ""
-
-    return "\n\n".join([
-        system_block.strip(),
-        "### Examples",
-        examples_block,
-        "### Retrieved Data",
-        sql_block,
-        "### User Question",
-        user_query,
-        "Answer using only the retrieved data." + confidence_line,
-    ])
-
-
-
-
-
-import yaml
-from pathlib import Path
-from typing import List, Dict
-
-
-class KShotExample:
-    def __init__(self, raw: Dict):
-        self.id = raw["id"]
-        self.intent = raw["intent"]
-        self.query_type = raw.get("query_type")
-        self.requires_sql = raw.get("requires_sql", False)
-        self.requires_explain = raw.get("requires_explain", False)
-        self.priority = raw.get("priority", 0)
-        self.example = raw["example"]
-
-    def matches(self, *, intent, query_type, requires_sql):
-        if self.intent != intent:
-            return False
-        if self.query_type and self.query_type != query_type:
-            return False
-        if self.requires_sql and not requires_sql:
-            return False
-        return True
-
-
-from typing import List
-from .kshots import KShotExample
-
-
-def select_kshots(
-    *,
-    kshots: List[KShotExample],
-    intent: str,
-    query_type: str,
-    requires_sql: bool,
-    k: int = 3
-) -> List[KShotExample]:
-
-    matched = [
-        ks for ks in kshots
-        if ks.matches(
-            intent=intent,
-            query_type=query_type,
-            requires_sql=requires_sql
-        )
-    ]
-
-    # Sort by priority (descending)
-    matched.sort(key=lambda x: x.priority, reverse=True)
-
-    return matched[:k]
-
-
-def render_kshot(text: str, context: dict) -> str:
-    for key in context:
-        placeholder = "{{" + key + "}}"
-        text = text.replace(placeholder, str(context[key]))
-    return text
-
-
-def build_prompt(
-    *,
-    user_query: str,
-    sql_context: str,
-    kshots: list,
-    runtime_context: dict
-) -> str:
-
-    rendered_kshots = []
-
-    for ks in kshots:
-        rendered_kshots.append(
-            f"User:\n{render_kshot(ks.example['user'], runtime_context)}\n"
-            f"Assistant:\n{render_kshot(ks.example['assistant'], runtime_context)}"
-        )
-
-    return f"""
-You are a firmware security assistant.
-
-### Examples
-{chr(10).join(rendered_kshots)}
-
-### Retrieved Data
-{sql_context}
-
-### User Question
-{user_query}
-
-Answer using only the retrieved data.
-Include a confidence score.
-"""
-
-
-
-
-
-
-def load_kshots(path: str) -> List[KShotExample]:
-    with open(path, "r") as f:
-        data = yaml.safe_load(f)
-
-    return [KShotExample(ks) for ks in data.get("kshots", [])]
-
-
-
-
-
-
-
-prompt = build_final_prompt(
-    user_query="Give me MPU policy details for address 0x0EF01000 in KAANAPALLI",
-    hyde_text="User is requesting MPU policy for a specific address in a project.",
-    sql_rows=[
-        {
-            "project": "KAANAPALLI",
-            "version": "5.3",
-            "mpu_name": "AOSS_PERIPH_MPU_XPU4",
-            "rg_index": 35,
-            "addr_start": "0x0EF01000",
-            "addr_end": "0x0EF02000",
-            "region_size": 4096,
-            "covers_address": True,
-        }
-    ],
-    kshot_yaml_path="kshot_examples.yaml",
-)
-
-print(prompt)
-
-
-
-import yaml
-from pathlib import Path
-
-def load_kshot_examples(
-    path: str | Path,
-    max_examples: int | None = None,
-) -> list[dict]:
-    path = Path(path)
-    with path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-
-    shots = data.get("kshots", [])
-    if max_examples is not None:
-        shots = shots[:max_examples]
-    return shots
-
-def build_sql_context(rows: list[dict]) -> str:
-    if not rows:
-        return "SQL Context:\n(empty)"
-
-    lines = ["SQL Context:"]
-    for i, row in enumerate(rows, start=1):
-        lines.append(f"\nRegion {i}:")
-        for key, value in row.items():
-            if value is None:
-                continue
-            lines.append(f"- {key}: {value}")
-    return "\n".join(lines)
-
-def render_kshots(kshots: list[dict]) -> str:
-    blocks = []
-    for shot in kshots:
-        block = f"""
-### K-SHOT EXAMPLE: {shot.get("description")}
-
-User Query:
-{shot.get("user_query")}
-
-SQL Context:
-{shot.get("sql_context")}
-
-Answer:
-{shot.get("answer")}
-""".strip()
-        blocks.append(block)
-
-    return "\n\n".join(blocks)
-
-
-
-where_params = []
-    for cond in self.conditions:
-        if cond == "project = %s":
-            where_params.append(self.filters["project"])
-        elif cond == "version = %s":
-            where_params.append(self.filters["version"])
-        elif cond == "mpu_name = %s":
-            where_params.append(self.filters["mpu_name"])
-        elif cond == "profile = %s":
-            where_params.append(self.filters["profile"])
-        elif cond == "addr_start <= %s":
-            where_params.append(effective_end)
-        elif cond == "addr_end >= %s":
-            where_params.append(addr_start)
-
-    # ---- final SQL ----
-    sql = f"""
-    {select_sql}
-    {where_clause}
-    {order_clause}
-    {limit_clause}
-    """.strip()
-
-    final_params = explain_params + where_params
-
-    # ---- defensive check ----
-    assert sql.count("%s") == len(final_params), (
-        f"SQL placeholders={sql.count('%s')} "
-        f"params={len(final_params)}"
-    )
-
-    return sql, final_params
-
-
-def explain_region_choice(
-    row: dict,
-    query_start: int | None,
-    query_end: int | None,
-    is_point: bool,
-) -> str | None:
-    """
-    Generates explainability text STRICTLY from SQL-computed facts.
-
-    Defensive guarantees:
-    - No KeyError
-    - No hallucination
-    - No inference beyond SQL results
-    - Returns None if explainability is not justified
-    """
-
-    if not isinstance(row, dict):
-        return None
-
-    # Required base fields
-    addr_start = row.get("addr_start")
-    addr_end = row.get("addr_end")
-    rg_index = row.get("rg_index")
-
-    if addr_start is None or addr_end is None:
-        return None
-
-    # ---------- POINT ADDRESS QUERY ----------
-    if is_point:
-        covers = row.get("covers_address")
-        region_size = row.get("region_size")
-
-        if covers is not True or region_size is None:
-            return None
-
-        return (
-            f"Address 0x{query_start:X} is covered by MPU region "
-            f"[0x{addr_start:X}–0x{addr_end:X}]. "
-            f"This region was selected because it is the most specific match "
-            f"(region size = {region_size} bytes)"
-            + (f" with priority rg_index={rg_index}." if rg_index is not None else ".")
-        )
-
-    # ---------- RANGE ADDRESS QUERY ----------
-    overlap = row.get("effective_overlap_size")
-
-    if overlap is None or overlap <= 0:
-        return None
-
-    return (
-        f"Address range [0x{query_start:X}–0x{query_end:X}] overlaps with MPU region "
-        f"[0x{addr_start:X}–0x{addr_end:X}] "
-        f"(overlap size = {overlap} bytes)."
-    )
-
-
-
-
-def _apply_version(self):
-    version = self.filters.get("version")
-
-    if version:
-        self.conditions.append("version = %s")
-        self.params.append(version)
-        return
-
-    # Version not provided → resolve latest
-    project = self.filters.get("project")
-    if project and self.version_resolver:
-        resolved = self.version_resolver(project)
-        if resolved:
-            self.conditions.append("version = %s")
-            self.params.append(resolved)
-
-
-def _sql_search(self, params: dict) -> list[dict]:
-    """
-    Executes deterministic SQL path and enriches rows with
-    classification + explainability.
-    """
-    logger.info(
-        "Entering _sql_search with params: %s",
-        _safe_params_for_log(params)
-    )
-
-    facts = QueryFacts(**params)
-
-    # ---- Run SQL path ----
-    rows = self.run_sql_path(facts)
-
-    if not rows:
-        logger.info("SQL returned no rows")
-        return []
-
-    # ---- Enrich rows (pure functions) ----
-    enriched = []
-    for row in rows:
-        # classification
-        cls = classify_policy(
-            row["addr_start"],
-            row["addr_end"],
-            row.get("profile"),
-        )
-        row.update(cls)
-
-        # explainability
-        if facts.addr_start is not None:
-            row["explanation"] = explain_region_choice(
-                row=row,
-                query_start=facts.addr_start,
-                query_end=facts.addr_end,
-            )
-
-        enriched.append(row)
-
-    return enriched
+COUNT      → “how many”, “number of”
+LIST       → “list”, “show all”, enumerate
+COMPARE    → “compare”, “difference”
+VALIDATE   → “is allowed”, “is valid”
+EXPLAIN    → “why”, “explain”
+LOOKUP     → default row retrieval
+
+────────────────────────────────────────
+ENTITY DEFINITIONS (WHAT domain is queried)
+────────────────────────────────────────
+POLICY     → MPU policies, permissions, profiles
+REGION     → memory regions, region entries
+PROJECT    → project names, metadata
+VERSION    → project versions
+MPU        → MPU / XPU instances
+PROFILE    → static or dynamic policy profiles
+
+────────────────────────────────────────
+DOMAIN RULES
+────────────────────────────────────────
+- A profile is STATIC if fixed at build time.
+- A profile is NON_STATIC (dynamic) if it can be created, modified,
+  or overridden at runtime via firmware or OS mechanisms.
+
+Return ONLY valid JSON matching QueryFacts.
+Do not include explanations.
