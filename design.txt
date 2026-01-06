@@ -1,4 +1,157 @@
 
+# executors/policy_count.py
+from pypika import Table
+
+class PolicyCountExecutor(BaseExecutor):
+    def execute(self, facts):
+        table = Table("xml_chunks")
+
+        filters = {
+            "project": facts.project,
+            "version": facts.version,
+            "mpu_name": facts.mpu_name,
+            "entity_type": "POLICY",
+            "profile": facts.profile,
+        }
+
+        q = self.sql.count(table, filters)
+        rows = self.run_query(q)
+
+        return {
+            "count": rows[0][0],
+            "explanation": "Count of MPU policy entries from XML",
+            "confidence": 0.95,
+        }
+
+policy list
+# executors/policy_list.py
+from pypika import Table
+
+class PolicyListExecutor(BaseExecutor):
+    def execute(self, facts):
+        table = Table("xml_chunks")
+
+        filters = {
+            "project": facts.project,
+            "version": facts.version,
+            "mpu_name": facts.mpu_name,
+            "entity_type": "POLICY",
+            "profile": facts.profile,
+        }
+
+        q = self.sql.select_rows(table, filters)
+        rows = self.run_query(q)
+
+        return {
+            "rows": rows,
+            "explanation": "List of MPU policies from XML",
+            "confidence": 0.9,
+        }
+
+# executors/region_count.py
+from pypika import Table
+
+class RegionCountExecutor(BaseExecutor):
+    def execute(self, facts):
+        table = Table("xml_chunks")
+
+        filters = {
+            "project": facts.project,
+            "version": facts.version,
+            "mpu_name": facts.mpu_name,
+            "entity_type": "REGION",
+            "profile": facts.profile,
+        }
+
+        q = self.sql.count(table, filters)
+        rows = self.run_query(q)
+
+        return {
+            "count": rows[0][0],
+            "explanation": "Count of memory regions from XML",
+            "confidence": 0.95,
+        }
+
+
+# executors/project_list.py
+from pypika import Table
+
+class ProjectListExecutor(BaseExecutor):
+    def execute(self, facts):
+        table = Table("projects")
+
+        q = self.sql.select_rows(table, {})
+        rows = self.run_query(q)
+
+        return {
+            "projects": rows,
+            "explanation": "List of supported projects",
+            "confidence": 1.0,
+        }
+
+# executors/project_count.py
+from pypika import Table
+
+class ProjectCountExecutor(BaseExecutor):
+    def execute(self, facts):
+        table = Table("projects")
+
+        q = self.sql.count(table, {})
+        rows = self.run_query(q)
+
+        return {
+            "count": rows[0][0],
+            "explanation": "Total number of supported projects",
+            "confidence": 1.0,
+        }
+
+# executors/version_list.py
+from pypika import Table
+
+class VersionListExecutor(BaseExecutor):
+    def execute(self, facts):
+        table = Table("project_versions")
+
+        filters = {
+            "project": facts.project
+        }
+
+        q = self.sql.list_distinct(table, "version", filters)
+        rows = self.run_query(q)
+
+        return {
+            "versions": [r[0] for r in rows],
+            "explanation": f"Versions supported for project {facts.project}",
+            "confidence": 1.0,
+        }
+
+
+
+# executors/registry.py
+from executors.policy_count import PolicyCountExecutor
+from executors.policy_list import PolicyListExecutor
+from executors.region_count import RegionCountExecutor
+from executors.project_list import ProjectListExecutor
+from executors.project_count import ProjectCountExecutor
+from executors.version_list import VersionListExecutor
+
+EXECUTORS = {
+    "policy_count": PolicyCountExecutor,
+    "policy_list": PolicyListExecutor,
+    "region_count": RegionCountExecutor,
+    "project_list": ProjectListExecutor,
+    "project_count": ProjectCountExecutor,
+    "project_version_list": VersionListExecutor,
+}
+
+
+
+
+
+
+
+
+
 # sql_builder.py
 from pypika import Query, Table, functions as fn
 
