@@ -1,3 +1,177 @@
+
+import logging
+from typing import Any, Dict
+from query_facts import QueryFacts
+
+logger = logging.getLogger(__name__)
+
+
+class ExecutorError(Exception):
+    pass
+
+
+class BaseExecutor:
+    name: str = "base"
+
+    def validate(self, facts: QueryFacts):
+        """Override if validation needed"""
+        pass
+
+    def execute(self, facts: QueryFacts) -> Dict[str, Any]:
+        raise NotImplementedError
+
+from typing import List, Dict, Any
+import psycopg2
+
+
+class DB:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def fetch_all(self, sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
+        with self.conn.cursor() as cur:
+            cur.execute(sql, params)
+            cols = [c.name for c in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+    def fetch_one(self, sql: str, params: tuple = ()) -> Dict[str, Any]:
+        rows = self.fetch_all(sql, params)
+        return rows[0] if rows else {}
+
+from executors.base import BaseExecutor
+from query_facts import QueryFacts
+
+
+class RegionListExecutor(BaseExecutor):
+    name = "region_list"
+
+    def execute(self, facts: QueryFacts):
+        sql = """
+            SELECT region_id, region_name, profile, is_dynamic
+            FROM mpu_regions
+            WHERE project = %s
+              AND (%s IS NULL OR mpu_name = %s)
+        """
+        params = (facts.project, facts.mpu_name, facts.mpu_name)
+
+        return {
+            "rows": self.db.fetch_all(sql, params),
+            "meta": {"entity": "REGION"}
+        }
+
+from executors.base import BaseExecutor
+from query_facts import QueryFacts
+
+
+class RegionCountExecutor(BaseExecutor):
+    name = "region_count"
+
+    def execute(self, facts: QueryFacts):
+        sql = """
+            SELECT COUNT(*) AS count
+            FROM mpu_regions
+            WHERE project = %s
+              AND (%s IS NULL OR mpu_name = %s)
+        """
+        params = (facts.project, facts.mpu_name, facts.mpu_name)
+
+        return self.db.fetch_one(sql, params)
+
+
+from executors.base import BaseExecutor
+from query_facts import QueryFacts
+
+
+class PolicyListExecutor(BaseExecutor):
+    name = "policy_list"
+
+    def execute(self, facts: QueryFacts):
+        sql = """
+            SELECT policy_id, policy_name, profile_type
+            FROM mpu_policies
+            WHERE project = %s
+              AND (%s IS NULL OR mpu_name = %s)
+              AND (%s IS NULL OR profile_type = %s)
+        """
+        params = (
+            facts.project,
+            facts.mpu_name, facts.mpu_name,
+            facts.profile, facts.profile
+        )
+
+        return {
+            "rows": self.db.fetch_all(sql, params),
+            "meta": {"entity": "POLICY"}
+        }
+from executors.base import BaseExecutor
+from query_facts import QueryFacts
+
+
+class ProjectListExecutor(BaseExecutor):
+    name = "project_list"
+
+    def execute(self, facts: QueryFacts):
+        sql = """
+            SELECT DISTINCT project
+            FROM project_versions
+            ORDER BY project
+        """
+        return {"rows": self.db.fetch_all(sql)}
+
+from executors.base import BaseExecutor
+from query_facts import QueryFacts
+
+
+class ProjectCountExecutor(BaseExecutor):
+    name = "project_count"
+
+    def execute(self, facts: QueryFacts):
+        sql = "SELECT COUNT(DISTINCT project) AS count FROM project_versions"
+        return self.db.fetch_one(sql)
+
+from executors.base import BaseExecutor
+from query_facts import QueryFacts
+
+
+class ProjectVersionListExecutor(BaseExecutor):
+    name = "project_version_list"
+
+    def execute(self, facts: QueryFacts):
+        sql = """
+            SELECT project, version
+            FROM project_versions
+            WHERE (%s IS NULL OR project = %s)
+            ORDER BY project, version DESC
+        """
+        params = (facts.project, facts.project)
+
+        return {"rows": self.db.fetch_all(sql, params)}
+from executors.region_list import RegionListExecutor
+from executors.region_count import RegionCountExecutor
+from executors.policy_list import PolicyListExecutor
+from executors.project_list import ProjectListExecutor
+from executors.project_count import ProjectCountExecutor
+from executors.project_version_list import ProjectVersionListExecutor
+
+EXECUTORS = {
+    "region_list": RegionListExecutor,
+    "region_count": RegionCountExecutor,
+    "policy_list": PolicyListExecutor,
+    "project_list": ProjectListExecutor,
+    "project_count": ProjectCountExecutor,
+    "project_version_list": ProjectVersionListExecutor,
+}
+
+
+
+
+
+
+
+
+
+
+
 You are a strict information extractor for an MPU policy RAG system.
 
 Your job is to extract structured facts from the user query and the HyDE interpretation.
