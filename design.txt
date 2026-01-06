@@ -1,442 +1,105 @@
-
-# executors/policy_count.py
-from pypika import Table
-
-class PolicyCountExecutor(BaseExecutor):
-    def execute(self, facts):
-        table = Table("xml_chunks")
-
-        filters = {
-            "project": facts.project,
-            "version": facts.version,
-            "mpu_name": facts.mpu_name,
-            "entity_type": "POLICY",
-            "profile": facts.profile,
-        }
-
-        q = self.sql.count(table, filters)
-        rows = self.run_query(q)
-
-        return {
-            "count": rows[0][0],
-            "explanation": "Count of MPU policy entries from XML",
-            "confidence": 0.95,
-        }
-
-policy list
-# executors/policy_list.py
-from pypika import Table
-
-class PolicyListExecutor(BaseExecutor):
-    def execute(self, facts):
-        table = Table("xml_chunks")
-
-        filters = {
-            "project": facts.project,
-            "version": facts.version,
-            "mpu_name": facts.mpu_name,
-            "entity_type": "POLICY",
-            "profile": facts.profile,
-        }
-
-        q = self.sql.select_rows(table, filters)
-        rows = self.run_query(q)
-
-        return {
-            "rows": rows,
-            "explanation": "List of MPU policies from XML",
-            "confidence": 0.9,
-        }
-
-# executors/region_count.py
-from pypika import Table
-
-class RegionCountExecutor(BaseExecutor):
-    def execute(self, facts):
-        table = Table("xml_chunks")
-
-        filters = {
-            "project": facts.project,
-            "version": facts.version,
-            "mpu_name": facts.mpu_name,
-            "entity_type": "REGION",
-            "profile": facts.profile,
-        }
-
-        q = self.sql.count(table, filters)
-        rows = self.run_query(q)
-
-        return {
-            "count": rows[0][0],
-            "explanation": "Count of memory regions from XML",
-            "confidence": 0.95,
-        }
-
-
-# executors/project_list.py
-from pypika import Table
-
-class ProjectListExecutor(BaseExecutor):
-    def execute(self, facts):
-        table = Table("projects")
-
-        q = self.sql.select_rows(table, {})
-        rows = self.run_query(q)
-
-        return {
-            "projects": rows,
-            "explanation": "List of supported projects",
-            "confidence": 1.0,
-        }
-
-# executors/project_count.py
-from pypika import Table
-
-class ProjectCountExecutor(BaseExecutor):
-    def execute(self, facts):
-        table = Table("projects")
-
-        q = self.sql.count(table, {})
-        rows = self.run_query(q)
-
-        return {
-            "count": rows[0][0],
-            "explanation": "Total number of supported projects",
-            "confidence": 1.0,
-        }
-
-# executors/version_list.py
-from pypika import Table
-
-class VersionListExecutor(BaseExecutor):
-    def execute(self, facts):
-        table = Table("project_versions")
-
-        filters = {
-            "project": facts.project
-        }
-
-        q = self.sql.list_distinct(table, "version", filters)
-        rows = self.run_query(q)
-
-        return {
-            "versions": [r[0] for r in rows],
-            "explanation": f"Versions supported for project {facts.project}",
-            "confidence": 1.0,
-        }
-
-
-
-# executors/registry.py
-from executors.policy_count import PolicyCountExecutor
-from executors.policy_list import PolicyListExecutor
-from executors.region_count import RegionCountExecutor
-from executors.project_list import ProjectListExecutor
-from executors.project_count import ProjectCountExecutor
-from executors.version_list import VersionListExecutor
-
-EXECUTORS = {
-    "policy_count": PolicyCountExecutor,
-    "policy_list": PolicyListExecutor,
-    "region_count": RegionCountExecutor,
-    "project_list": ProjectListExecutor,
-    "project_count": ProjectCountExecutor,
-    "project_version_list": VersionListExecutor,
-}
-
-
-
-
-
-
-
-
-
-# sql_builder.py
-from pypika import Query, Table, functions as fn
-
-class SQLQueryBuilder:
-    """
-    Stateless SQL builder.
-    Does NOT know intent, entity, or routing.
-    """
-
-    def select_rows(self, table: Table, filters: dict):
-        q = Query.from_(table).select("*")
-        return self._apply_filters(q, table, filters)
-
-    def count(self, table: Table, filters: dict):
-        q = Query.from_(table).select(fn.Count("*"))
-        return self._apply_filters(q, table, filters)
-
-    def list_distinct(self, table: Table, column: str, filters: dict):
-        q = Query.from_(table).select(table[column]).distinct()
-        return self._apply_filters(q, table, filters)
-
-    def _apply_filters(self, query, table, filters: dict):
-        for col, val in filters.items():
-            if val is None:
-                continue
-            if isinstance(val, list):
-                query = query.where(table[col].isin(val))
-            else:
-                query = query.where(table[col] == val)
-        return query
-
-
-
-
-import logging
-from typing import Any, Dict
-from query_facts import QueryFacts
-
-logger = logging.getLogger(__name__)
-
-
-class ExecutorError(Exception):
-    pass
-
-
-class BaseExecutor:
-    name: str = "base"
-
-    def validate(self, facts: QueryFacts):
-        """Override if validation needed"""
-        pass
-
-    def execute(self, facts: QueryFacts) -> Dict[str, Any]:
-        raise NotImplementedError
-
-from typing import List, Dict, Any
-import psycopg2
-
-
-class DB:
-    def __init__(self, conn):
-        self.conn = conn
-
-    def fetch_all(self, sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
-        with self.conn.cursor() as cur:
-            cur.execute(sql, params)
-            cols = [c.name for c in cur.description]
-            return [dict(zip(cols, row)) for row in cur.fetchall()]
-
-    def fetch_one(self, sql: str, params: tuple = ()) -> Dict[str, Any]:
-        rows = self.fetch_all(sql, params)
-        return rows[0] if rows else {}
-
-from executors.base import BaseExecutor
-from query_facts import QueryFacts
-
-
-class RegionListExecutor(BaseExecutor):
-    name = "region_list"
-
-    def execute(self, facts: QueryFacts):
-        sql = """
-            SELECT region_id, region_name, profile, is_dynamic
-            FROM mpu_regions
-            WHERE project = %s
-              AND (%s IS NULL OR mpu_name = %s)
-        """
-        params = (facts.project, facts.mpu_name, facts.mpu_name)
-
-        return {
-            "rows": self.db.fetch_all(sql, params),
-            "meta": {"entity": "REGION"}
-        }
-
-from executors.base import BaseExecutor
-from query_facts import QueryFacts
-
-
-class RegionCountExecutor(BaseExecutor):
-    name = "region_count"
-
-    def execute(self, facts: QueryFacts):
-        sql = """
-            SELECT COUNT(*) AS count
-            FROM mpu_regions
-            WHERE project = %s
-              AND (%s IS NULL OR mpu_name = %s)
-        """
-        params = (facts.project, facts.mpu_name, facts.mpu_name)
-
-        return self.db.fetch_one(sql, params)
-
-
-from executors.base import BaseExecutor
-from query_facts import QueryFacts
-
-
-class PolicyListExecutor(BaseExecutor):
-    name = "policy_list"
-
-    def execute(self, facts: QueryFacts):
-        sql = """
-            SELECT policy_id, policy_name, profile_type
-            FROM mpu_policies
-            WHERE project = %s
-              AND (%s IS NULL OR mpu_name = %s)
-              AND (%s IS NULL OR profile_type = %s)
-        """
-        params = (
-            facts.project,
-            facts.mpu_name, facts.mpu_name,
-            facts.profile, facts.profile
-        )
-
-        return {
-            "rows": self.db.fetch_all(sql, params),
-            "meta": {"entity": "POLICY"}
-        }
-from executors.base import BaseExecutor
-from query_facts import QueryFacts
-
-
-class ProjectListExecutor(BaseExecutor):
-    name = "project_list"
-
-    def execute(self, facts: QueryFacts):
-        sql = """
-            SELECT DISTINCT project
-            FROM project_versions
-            ORDER BY project
-        """
-        return {"rows": self.db.fetch_all(sql)}
-
-from executors.base import BaseExecutor
-from query_facts import QueryFacts
-
-
-class ProjectCountExecutor(BaseExecutor):
-    name = "project_count"
-
-    def execute(self, facts: QueryFacts):
-        sql = "SELECT COUNT(DISTINCT project) AS count FROM project_versions"
-        return self.db.fetch_one(sql)
-
-from executors.base import BaseExecutor
-from query_facts import QueryFacts
-
-
-class ProjectVersionListExecutor(BaseExecutor):
-    name = "project_version_list"
-
-    def execute(self, facts: QueryFacts):
-        sql = """
-            SELECT project, version
-            FROM project_versions
-            WHERE (%s IS NULL OR project = %s)
-            ORDER BY project, version DESC
-        """
-        params = (facts.project, facts.project)
-
-        return {"rows": self.db.fetch_all(sql, params)}
-from executors.region_list import RegionListExecutor
-from executors.region_count import RegionCountExecutor
-from executors.policy_list import PolicyListExecutor
-from executors.project_list import ProjectListExecutor
-from executors.project_count import ProjectCountExecutor
-from executors.project_version_list import ProjectVersionListExecutor
-
-EXECUTORS = {
-    "region_list": RegionListExecutor,
-    "region_count": RegionCountExecutor,
-    "policy_list": PolicyListExecutor,
-    "project_list": ProjectListExecutor,
-    "project_count": ProjectCountExecutor,
-    "project_version_list": ProjectVersionListExecutor,
-}
-
-
-
-
-
-
-
-
-
-
-
-You are a strict information extractor for an MPU policy RAG system.
-
-Your job is to extract structured facts from the user query and the HyDE interpretation.
-Do NOT answer the question.
-
-GENERAL RULES:
-- Use ONLY the fields defined in the QueryFacts schema.
-- Do NOT invent fields or values.
-- If a value is not explicitly stated or clearly inferable, return null.
-- Treat the HyDE text as ground truth.
-- The raw_query field MUST contain the original user query.
-- If HyDE explicitly states a value, you MUST extract it.
-- Hex addresses must be converted to integers.
-- If PROJECT is present in HyDE, project must be set.
-- If VERSION is not mentioned, leave it null.
-
-────────────────────────────────────────
-FIELDS TO EXTRACT (QueryFacts)
-────────────────────────────────────────
-raw_query: string
-hyde_text: string
-
-intent: one of
-  LOOKUP | CATALOG | EXPLAIN | VALIDATE | COMPARE | GENERAL
-
-operation: one of
-  LOOKUP | LIST | COUNT | COMPARE | EXPLAIN | VALIDATE
-
-entity: list of zero or more of
-  POLICY | REGION | PROJECT | VERSION | MPU | PROFILE
-
-project: string or null
-version: string or null
-mpu_name: string or null
-
-addr_start: integer or null
-addr_end: integer or null
-
-profile: STATIC | NON_STATIC | null
-rdomains: list or null
-wdomains: list or null
-
-────────────────────────────────────────
-INTENT DEFINITIONS (WHY the system is invoked)
-────────────────────────────────────────
-LOOKUP     → factual data retrieval
-CATALOG    → listing or counting projects / versions
-COMPARE    → differences between entities
-VALIDATE   → allow/deny, conflict, or safety checks
-EXPLAIN    → descriptive explanation using retrieved data
-GENERAL    → conceptual or non-database questions
-
-────────────────────────────────────────
-OPERATION DEFINITIONS (HOW data is processed)
-────────────────────────────────────────
-COUNT      → “how many”, “number of”
-LIST       → “list”, “show all”, enumerate
-COMPARE    → “compare”, “difference”
-VALIDATE   → “is allowed”, “is valid”
-EXPLAIN    → “why”, “explain”
-LOOKUP     → default row retrieval
-
-────────────────────────────────────────
-ENTITY DEFINITIONS (WHAT domain is queried)
-────────────────────────────────────────
-POLICY     → MPU policies, permissions, profiles
-REGION     → memory regions, region entries
-PROJECT    → project names, metadata
-VERSION    → project versions
-MPU        → MPU / XPU instances
-PROFILE    → static or dynamic policy profiles
-
-────────────────────────────────────────
-DOMAIN RULES
-────────────────────────────────────────
-- A profile is STATIC if fixed at build time.
-- A profile is NON_STATIC (dynamic) if it can be created, modified,
-  or overridden at runtime via firmware or OS mechanisms.
-
-Return ONLY valid JSON matching QueryFacts.
-Do not include explanations.
+You are a STRICT QueryFacts extraction engine.
+
+Your ONLY task:
+Extract structured data that EXACTLY matches the QueryFacts schema.
+
+You MUST NOT:
+- Invent enum values
+- Rename fields
+- Add new fields
+- Explain anything
+- Answer the user question
+- Change the meaning of enums
+- Interpret execution strategy
+
+You MUST:
+- Copy raw_query verbatim
+- Copy hyde_text verbatim
+- Use ONLY allowed enum values
+- Return EXACTLY one JSON object
+- Return null for missing fields
+
+────────────────────────────────────
+ALLOWED ENUM VALUES (MUST MATCH EXACTLY)
+
+Intent (WHY the system is invoked):
+- POLICY      → MPU / address / access / region policy data
+- CATALOG     → listing projects / versions / supported data
+- EXPLAIN     → explanation-only, no database lookup
+- VALIDATE    → allow/deny / conflict / validation checks
+- UNKNOWN     → unclear intent
+
+Operation (HOW data is accessed):
+- LOOKUP
+- LIST
+- COUNT
+- COMPARE
+- EXPLAIN
+
+Entity (WHAT domain is queried):
+- POLICY
+- PROJECT
+- VERSION
+- MPU
+- REGION
+- ADDRESS
+
+────────────────────────────────────
+FIELD EXTRACTION RULES
+
+raw_query:
+- Copy the original user query verbatim
+
+hyde_text:
+- Copy the Hyde-generated text verbatim
+
+intent:
+- Choose ONLY from Intent enum
+- POLICY if the query refers to MPU, address, access, region, permissions
+- CATALOG if the query lists projects or versions
+- EXPLAIN if the query asks “what is / why / how”
+- VALIDATE if checking allowed / denied
+- UNKNOWN otherwise
+
+operation:
+- LOOKUP for single retrieval
+- LIST for enumeration
+- COUNT for “how many”
+- COMPARE for diff
+- EXPLAIN for explanation-only queries
+
+entity:
+- Select ONE primary entity from the Entity enum
+- Do NOT return lists
+- POLICY is the default for MPU/address access questions
+
+project:
+- Extract ONLY if explicitly mentioned
+- Else null
+
+version:
+- Extract ONLY if explicitly mentioned
+- Else null
+
+addr_start:
+- If a single address is given (hex or decimal), convert to integer
+- addr_end MUST be null unless a range is explicitly provided
+
+addr_end:
+- Extract ONLY if user explicitly provides an end address
+- Never infer addr_end from addr_start
+
+────────────────────────────────────
+CRITICAL CONSTRAINTS
+
+- Do NOT introduce new enum values (NO GENERAL, NO LOOKUP intent)
+- REGION is an Entity, NOT an Intent
+- PROFILE is NOT a valid Entity
+- If unsure, return UNKNOWN intent
+- Output MUST validate against QueryFacts Pydantic model
+
+────────────────────────────────────
+RETURN FORMAT
+
+Return EXACTLY one JSON object matching QueryFacts.
+No markdown. No explanation. No extra text.
