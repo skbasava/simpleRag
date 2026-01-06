@@ -1,4 +1,38 @@
 
+# sql_builder.py
+from pypika import Query, Table, functions as fn
+
+class SQLQueryBuilder:
+    """
+    Stateless SQL builder.
+    Does NOT know intent, entity, or routing.
+    """
+
+    def select_rows(self, table: Table, filters: dict):
+        q = Query.from_(table).select("*")
+        return self._apply_filters(q, table, filters)
+
+    def count(self, table: Table, filters: dict):
+        q = Query.from_(table).select(fn.Count("*"))
+        return self._apply_filters(q, table, filters)
+
+    def list_distinct(self, table: Table, column: str, filters: dict):
+        q = Query.from_(table).select(table[column]).distinct()
+        return self._apply_filters(q, table, filters)
+
+    def _apply_filters(self, query, table, filters: dict):
+        for col, val in filters.items():
+            if val is None:
+                continue
+            if isinstance(val, list):
+                query = query.where(table[col].isin(val))
+            else:
+                query = query.where(table[col] == val)
+        return query
+
+
+
+
 import logging
 from typing import Any, Dict
 from query_facts import QueryFacts
