@@ -1,65 +1,106 @@
-# planner.py
-from typing import Dict, List
+from typing import Dict, Tuple, List
+from dataclasses import dataclass
+
+# import your QueryFacts model
+from query_facts import QueryFacts
 
 
 class PlannerError(Exception):
+    """Raised when planner cannot deterministically route a query."""
     pass
 
 
-class QueryPlanner:
+@dataclass(frozen=True)
+class PlanResult:
+    executor: str
+    intent: str
+    operation: str
+    entity: List[str]
+
+
+class Planner:
     """
     Deterministic planner.
-    Input: QueryFacts (from Instructor)
-    Output: executor name (string)
+    Input  : QueryFacts (from Instructor)
+    Output : Executor name (string)
     """
 
-    def __init__(self):
-        # (intent, operation, entity) -> executor
-        self.ROUTES: Dict[tuple, str] = {
-            # POLICY domain
-            ("POLICY", "LIST", "REGION"): "policy_region_list",
-            ("POLICY", "LIST", "POLICY"): "policy_list",
-            ("POLICY", "COUNT", "REGION"): "policy_region_count",
-            ("POLICY", "COUNT", "POLICY"): "policy_count",
+    def __init__(self) -> None:
+        """
+        Routing table:
+        (intent, operation, entity) -> executor_name
+        """
 
-            # CATALOG domain
+        self.ROUTES: Dict[Tuple[str, str, str], str] = {
+
+            # -------- POLICY / REGION DATA (xml_chunks, policy tables) --------
+            ("LOOKUP", "LOOKUP", "POLICY"): "policy_lookup",
+            ("LOOKUP", "LOOKUP", "REGION"): "region_lookup",
+
+            ("POLICY", "LIST", "POLICY"): "policy_list",
+            ("POLICY", "LIST", "REGION"): "region_list",
+            ("POLICY", "COUNT", "POLICY"): "policy_count",
+            ("POLICY", "COUNT", "REGION"): "region_count",
+
+            # -------- PROJECT / VERSION CATALOG (project_version tables) --------
             ("CATALOG", "LIST", "PROJECT"): "project_list",
             ("CATALOG", "COUNT", "PROJECT"): "project_count",
+
             ("CATALOG", "LIST", "VERSION"): "project_version_list",
+            ("CATALOG", "COUNT", "VERSION"): "project_version_count",
+
+            # -------- COMPARISON --------
+            ("COMPARE", "COMPARE", "POLICY"): "policy_compare",
+            ("COMPARE", "COMPARE", "REGION"): "region_compare",
+
+            # -------- VALIDATION --------
+            ("VALIDATE", "VALIDATE", "POLICY"): "policy_validate",
+            ("VALIDATE", "VALIDATE", "REGION"): "region_validate",
         }
 
-    def plan(self, facts) -> str:
+    def plan(self, facts: QueryFacts) -> PlanResult:
         """
         Decide executor from QueryFacts.
+
+        This function MUST be:
+        - deterministic
+        - side-effect free
+        - easy to debug
         """
 
         intent = facts.intent
         operation = facts.operation
-        entities: List[str] = facts.entity or []
+        entities = facts.entity or []
 
         if not intent or not operation:
+            raise PlannerError("Intent or operation missing in QueryFacts")
+
+        if not entities:
             raise PlannerError(
-                f"Missing intent/operation in QueryFacts: intent={intent}, operation={operation}"
+                f"No entity provided for intent={intent}, operation={operation}"
             )
 
-        # Try routing using each entity
-        matched = []
+        matched: List[str] = []
+
         for entity in entities:
             key = (intent, operation, entity)
             if key in self.ROUTES:
                 matched.append(self.ROUTES[key])
 
-        if len(matched) == 1:
-            return matched[0]
+        if not matched:
+            raise PlannerError(
+                f"No route for intent={intent}, operation={operation}, entities={entities}"
+            )
 
         if len(matched) > 1:
             raise PlannerError(
-                f"Ambiguous planner route for intent={intent}, "
-                f"operation={operation}, entities={entities}. "
-                f"Matched executors={matched}"
+                f"Ambiguous routing for intent={intent}, operation={operation}, "
+                f"entities={entities}. Matched executors={matched}"
             )
 
-        raise PlannerError(
-            f"No planner route for intent={intent}, "
-            f"operation={operation}, entities={entities}"
+        return PlanResult(
+            executor=matched[0],
+            intent=intent,
+            operation=operation,
+            entity=entities,
         )
