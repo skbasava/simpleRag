@@ -1,3 +1,33 @@
+# sql_query_builder.py
+from pypika import Table, Query, Criterion
+
+class SQLQueryBuilder:
+    def __init__(self):
+        self.xml = Table("xml_chunks")
+
+    def policy_by_address(self, project: str, addr: int):
+        return (
+            Query.from_(self.xml)
+            .select(
+                self.xml.mpu_name,
+                self.xml.policy_name,
+                self.xml.addr_start,
+                self.xml.addr_end,
+                self.xml.profile_type,
+                self.xml.domains,
+            )
+            .where(self.xml.project == project)
+            .where(
+                Criterion.all([
+                    self.xml.addr_start <= addr,
+                    self.xml.addr_end >= addr,
+                ])
+            )
+        )
+
+
+
+
 class BaseExecutor(ABC):
     def __init__(self, db, sql_builder):
         self.db = db
