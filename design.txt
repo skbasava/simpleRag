@@ -1,4 +1,32 @@
 
+from pydantic import BaseModel, model_validator
+
+class QueryFacts(BaseModel):
+    ...
+
+    @model_validator(mode="after")
+    def validate_entity_rules(self):
+        """
+        Enforces cross-field validation after model is built
+        """
+
+        # Example rules
+        if self.intent == Intent.POLICY and not self.entity:
+            raise ValueError("POLICY intent requires at least one entity")
+
+        if Entity.ADDRESS in self.entity:
+            if not self.addr_start:
+                raise ValueError("ADDRESS entity requires addr_start")
+
+        if self.operation == Operation.LOOKUP and not self.project:
+            raise ValueError("LOOKUP operation requires project")
+
+        return self
+
+
+
+
+
 from pydantic import BaseModel, Field, root_validator
 from typing import Optional, List
 
