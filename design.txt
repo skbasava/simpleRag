@@ -1,3 +1,96 @@
+
+from pydantic import BaseModel, Field, root_validator
+from typing import Optional, List
+
+
+class QueryFacts(BaseModel):
+    intent: Intent
+    operation: Operation
+    entity: Entity
+
+    # filters
+    project: Optional[str] = None
+    version: Optional[str] = None
+    region: Optional[str] = None
+
+    addr_start: Optional[int] = Field(
+        None, description="Start address (decimal integer)"
+    )
+    addr_end: Optional[int] = Field(
+        None, description="End address (decimal integer)"
+    )
+
+    # metadata
+    raw_query: Optional[str] = None
+    missing_required_fields: Optional[List[str]] = None
+
+    @root_validator
+    def validate_entity_rules(cls, values):
+        """
+        Hard safety rules so routing never breaks
+        """
+        entity = values.get("entity")
+        intent = values.get("intent")
+        operation = values.get("operation")
+
+        # ADDRESS entity must have addr_start
+        if entity == Entity.ADDRESS and not values.get("addr_start"):
+            values["missing_required_fields"] = ["addr_start"]
+
+        # POLICY LOOKUP by address is valid
+        if intent == Intent.POLICY and operation == Operation.LOOKUP:
+            if entity not in (Entity.POLICY, Entity.ADDRESS):
+                raise ValueError("POLICY LOOKUP must use POLICY or ADDRESS entity")
+
+        return values
+
+INSTRUCTOR_PROMPT = """
+You are extracting structured QueryFacts for a query planner.
+
+CRITICAL RULES (MUST FOLLOW):
+- Entity MUST be one of the allowed domain entities.
+- DO NOT invent new entities.
+- Hardware terms like "MPU", "core", "SoC", "cache" are CONTEXT ONLY.
+- "MPU" must NEVER be an entity.
+- Entity represents the DATA DOMAIN being queried, not the noun in the sentence.
+
+ALLOWED ENTITIES:
+- POLICY  → MPU access policies
+- PROJECT → Project catalog
+- VERSION → Project versions
+- REGION  → Memory regions
+- ADDRESS → Address-based lookup
+
+MAPPING RULES:
+- "MPU access policy", "access policy", "policy" → Entity.POLICY
+- "list of policies" → Entity.POLICY
+- "supported projects" → Entity.PROJECT
+- "address 0x..." → Entity.ADDRESS
+- NEVER output Entity.MPU
+
+ADDRESS RULES:
+- If an address like 0xEF01000 is present:
+  - Convert it to decimal integer
+  - Set addr_start
+  - Set entity = ADDRESS
+  - Use operation = LOOKUP
+
+OUTPUT FORMAT:
+- Return ONLY valid JSON
+- Must match the QueryFacts schema exactly
+"""
+
+
+
+
+
+
+
+
+
+
+
+
 You are a STRICT structured facts extraction engine for an MPU Access Policy RAG system.
 
 Your ONLY job is to extract structured facts from the user query
