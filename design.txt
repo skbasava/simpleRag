@@ -1,3 +1,58 @@
+
+# executors/policy_by_address.py
+from rag.executors.base import BaseExecutor, ExecutorError
+from rag.query_helpers.queryfacts import QueryFacts
+
+class PolicyByAddressExecutor(BaseExecutor):
+    name = "policy_by_address"
+
+    def execute(self, facts: QueryFacts):
+        # ------------------
+        # Validate inputs
+        # ------------------
+        if not facts.addr_start:
+            raise ExecutorError("addr_start is required for policy_by_address")
+
+        if not facts.project:
+            raise ExecutorError("project is required for policy_by_address")
+
+        # ------------------
+        # Build SQL
+        # ------------------
+        query = self.sql.policy_by_address(
+            project=facts.project,
+            addr=facts.addr_start,
+        )
+
+        # ------------------
+        # Execute
+        # ------------------
+        rows = self.run_query(query)
+
+        # ------------------
+        # Normalize rows
+        # ------------------
+        results = []
+        for row in rows:
+            results.append({
+                "mpu_name": row[0],
+                "policy_name": row[1],
+                "addr_start": row[2],
+                "addr_end": row[3],
+                "profile_type": row[4],
+                "domains": row[5],
+            })
+
+        # ------------------
+        # Return contract
+        # ------------------
+        return {
+            "rows": results,
+            "explanation": f"MPU policies covering address {hex(facts.addr_start)}",
+            "confidence": 0.95,
+        }
+
+
 # sql_query_builder.py
 from pypika import Table, Query, Criterion
 
