@@ -1,3 +1,35 @@
+class BaseExecutor(ABC):
+    def __init__(self, db, sql_builder):
+        self.db = db
+        self.sql = sql_builder
+
+    @abstractmethod
+    def execute(self, facts: QueryFacts) -> Dict[str, Any]:
+        pass
+
+    def run_query(self, query):
+        """
+        Executes SQL and ALWAYS returns List[Dict]
+        This is the ONLY place DB rows are normalized.
+        """
+        with self.db.cursor() as cur:
+            cur.execute(str(query))
+
+            columns = [desc[0] for desc in cur.description]
+            rows = cur.fetchall()
+
+            results = [dict(zip(columns, row)) for row in rows]
+
+            logger.debug(
+                "DB returned %d rows with columns=%s",
+                len(results),
+                columns,
+            )
+
+            return results
+
+
+
 context = f"""
 You are answering a structured database query.
 
