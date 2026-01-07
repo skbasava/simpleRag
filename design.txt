@@ -1,3 +1,48 @@
+context = f"""
+You are answering a structured database query.
+
+User question:
+{user_query}
+
+Query intent:
+- Intent: {facts.intent}
+- Operation: {facts.operation}
+
+Database result summary:
+{sql_context}
+
+Guidelines:
+- Do NOT list all records.
+- Provide a concise summary.
+- Mention total counts when available.
+- Highlight patterns, categories, or notable observations.
+
+Explainability:
+{execution_result.get('explanation')}
+"""
+
+intent = facts.intent
+operation = facts.operation
+rows = execution_result.get("rows", [])
+
+if operation == Operation.LIST:
+    sql_context = f"""
+Total MPU policies found: {len(rows)}
+
+Sample policies (first 5):
+{chr(10).join(
+    f"- MPU={r.get('mpu_name', 'unknown')}, "
+    f"addr={hex(r['addr_start']) if r.get('addr_start') else 'N/A'}"
+    for r in rows[:5]
+)}
+
+Note: Full list is too large to display. Summarize categories or patterns.
+"""
+
+
+
+
+
 
 CRITICAL VALIDATION RULE:
 - entity is a SINGLE ENUM VALUE
