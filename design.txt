@@ -1,3 +1,30 @@
+The user asked for MPU policy details for address {{ query.address }}.
+
+Project: {{ query.project }}
+{% if query.version %}
+Version: {{ query.version }}
+{% else %}
+Version: latest available
+{% endif %}
+
+{% if rows %}
+The following MPU regions cover this address:
+
+{% for row in rows %}
+- MPU: {{ row.mpu_name }}
+  Region Index: {{ row.rg_index }}
+  Address Range: 0x{{ "%X"|format(row.addr_start) }} – 0x{{ "%X"|format(row.addr_end) }}
+  Profile: {{ row.profile }}
+  Explanation: {{ row.explanation }}
+{% endfor %}
+
+{% else %}
+No MPU policy covers the given address.
+{% endif %}
+
+
+
+
 
 from pydantic import BaseModel, model_validator
 
