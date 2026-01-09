@@ -1,3 +1,55 @@
+from .base import render
+
+def render_policy_by_address(query, rows):
+    if not rows:
+        return render("empty_result.jinja")
+
+    return render(
+        "policy_by_address.jinja",
+        query=query,
+        rows=rows,
+    )
+
+
+def render_policy_list(query, rows):
+    if not rows:
+        return render("empty_result.jinja")
+
+    return render(
+        "policy_list.jinja",
+        query=query,
+        rows=rows,
+    )
+
+
+from .base import render
+
+def render_project_catalog(rows):
+    if not rows:
+        return render("empty_result.jinja")
+
+    return render(
+        "project_catalog.jinja",
+        rows=rows,
+    )
+
+from .base import render
+
+def render_policy_comparison(query, rows):
+    if not rows:
+        return render("empty_result.jinja")
+
+    # You can add compare.jinja later
+    return render(
+        "policy_list.jinja",
+        query=query,
+        rows=rows,
+    )
+
+
+
+
+
 The user requested a list of MPU policies.
 
 Project: {{ query.project }}
