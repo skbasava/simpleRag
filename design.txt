@@ -1,3 +1,57 @@
+The user requested a list of MPU policies.
+
+Project: {{ query.project }}
+{% if query.version %}
+Version: {{ query.version }}
+{% else %}
+Version: latest available
+{% endif %}
+
+{% if rows %}
+Found {{ rows | length }} MPU policies:
+
+{% for row in rows %}
+- {{ row.mpu_name }}
+  Region Index: {{ row.rg_index }}
+  Address Range: 0x{{ "%X"|format(row.addr_start) }} – 0x{{ "%X"|format(row.addr_end) }}
+  Profile: {{ row.profile }}
+{% endfor %}
+
+{% else %}
+No MPU policies were found.
+{% endif %}
+
+
+
+The user requested a catalog of supported projects.
+
+{% if rows %}
+Supported projects and latest versions:
+
+{% for row in rows %}
+- Project: {{ row.project }}
+  Latest Version: {{ row.version }}
+{% endfor %}
+
+{% else %}
+No project catalog information is available.
+{% endif %}
+
+No data was found for the given request.
+
+This may be due to:
+- Unsupported project
+- No matching MPU regions
+- Missing or invalid parameters
+
+Please refine the query with more details if possible.
+
+
+
+
+
+
+
 The user asked for MPU policy details for address {{ query.address }}.
 
 Project: {{ query.project }}
