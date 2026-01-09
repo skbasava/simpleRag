@@ -1,3 +1,48 @@
+
+def _build_llm_context_jinja(
+    self,
+    user_query: str,
+    hyde_text: str,
+    execution_result: Dict,
+    facts: QueryFacts,
+) -> list[dict]:
+
+    system_prompt = render("system_prompt.jinja")
+
+    if facts.entity == Entity.POLICY and facts.addr_start:
+        body = render(
+            "policy_by_address.jinja",
+            query=user_query,
+            facts=facts,
+            rows=execution_result.get("rows", []),
+        )
+
+    elif facts.entity == Entity.POLICY and facts.operation == Operation.LIST:
+        body = render(
+            "policy_list.jinja",
+            query=user_query,
+            facts=facts,
+            rows=execution_result.get("rows", []),
+        )
+
+    elif facts.entity == Entity.CATALOG:
+        body = render(
+            "project_catalog.jinja",
+            rows=execution_result.get("rows", []),
+        )
+
+    else:
+        body = render("empty_result.jinja")
+
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": body},
+    ]
+
+
+
+
+
 from .base import render
 
 def render_policy_by_address(query, rows):
