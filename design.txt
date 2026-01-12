@@ -1,3 +1,46 @@
+from pydantic import field_validator
+
+class QueryFacts(BaseModel):
+    intent: Optional[Intent] = None
+    operation: Optional[Operation] = None
+    entity: Optional[list[Entity]] = None
+
+    @field_validator("intent", mode="before")
+    @classmethod
+    def coerce_intent(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, Intent):
+            return v
+        if isinstance(v, str):
+            return Intent[v]
+        raise TypeError(f"Invalid intent value: {v}")
+
+    @field_validator("operation", mode="before")
+    @classmethod
+    def coerce_operation(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, Operation):
+            return v
+        if isinstance(v, str):
+            return Operation[v]
+        raise TypeError(f"Invalid operation value: {v}")
+
+    @field_validator("entity", mode="before")
+    @classmethod
+    def coerce_entity(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, list):
+            return [
+                e if isinstance(e, Entity) else Entity[e]
+                for e in v
+            ]
+        raise TypeError(f"Invalid entity value: {v}")
+
+
+
 
 def _build_llm_context_jinja(
     self,
