@@ -1,3 +1,44 @@
+class PolicyByAddressExecutor:
+    def __init__(self, db):
+        self.db = db
+
+    def run(self, facts) -> list[dict]:
+        rows = self.db.fetch_all(
+            """
+            SELECT mpu_name, addr_start, addr_end, profile
+            FROM xml_chunks
+            WHERE project = %s
+              AND addr_start <= %s
+              AND addr_end >= %s
+            ORDER BY (addr_end - addr_start) ASC
+            LIMIT 1
+            """,
+            (facts.project, facts.address, facts.address),
+        )
+
+        results = []
+        for r in rows:
+            results.append({
+                "text": (
+                    f"Address 0x{facts.address:X} is covered by MPU "
+                    f"{r['mpu_name']} range "
+                    f"[0x{r['addr_start']:X} - 0x{r['addr_end']:X}] "
+                    f"with profile {r['profile']}."
+                ),
+                "metadata": {
+                    "entity": "policy",
+                    "mpu": r["mpu_name"],
+                    "confidence": 0.95,
+                    "explain": "smallest matching MPU region",
+                }
+            })
+
+        return results
+
+
+
+
+
 from pydantic import field_validator
 
 class QueryFacts(BaseModel):
