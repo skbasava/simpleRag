@@ -1,3 +1,72 @@
+class ScalarNodeAdapter:
+    @staticmethod
+    def to_nodes(result: dict, *, entity: str, metric: str):
+        return [
+            TextNode(
+                text="",
+                metadata={
+                    "type": "catalog",
+                    "entity": entity,
+                    "metric": metric,     # "count"
+                    "value": result[metric],
+                    "confidence": result.get("confidence", 1.0),
+                    "explain": result.get("explanation", ""),
+                }
+            )
+        ]
+
+class EntityListNodeAdapter:
+    @staticmethod
+    def to_nodes(result: dict, *, entity: str):
+        nodes = []
+
+        for row in result.get("rows", []):
+            nodes.append(
+                TextNode(
+                    text="",
+                    metadata={
+                        "type": "catalog",
+                        "entity": entity,
+                        **row,
+                        "confidence": result.get("confidence", 1.0),
+                        "explain": "entity metadata",
+                    }
+                )
+            )
+        return nodes
+
+class IntervalPolicyNodeAdapter:
+    @staticmethod
+    def to_nodes(result: dict):
+        nodes = []
+
+        for row in result.get("rows", []):
+            nodes.append(
+                TextNode(
+                    text="",
+                    metadata={
+                        "type": "policy",
+                        "entity": "POLICY",
+                        "mpu": row["mpu_name"],
+                        "addr_start": row["addr_start"],
+                        "addr_end": row["addr_end"],
+                        "profile": row["profile"],
+                        "confidence": row["confidence"],
+                        "explain": row["explain"],
+                    }
+                )
+            )
+        return nodes
+
+
+
+
+
+
+
+
+
+
 class PolicyByAddressExecutor:
     def __init__(self, db):
         self.db = db
