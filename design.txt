@@ -1,3 +1,149 @@
+from typing import Dict, List, Any
+import logging
+
+from llama_index.core.schema import NodeWithScore
+from llama_index.core.response_synthesizers import ResponseSynthesizer
+from llama_index.core import PromptTemplate
+
+from rag.planner import Planner
+from rag.executors import SQLExecutors
+from rag.nodes import (
+    ScalarNodeAdapter,
+    EntityListNodeAdapter,
+    IntervalPolicyNodeAdapter,
+)
+from rag.hyde import HydeGenerator
+from rag.instructor import InstructorClient
+from rag.models import QueryFacts
+
+logger = logging.getLogger(__name__)
+
+
+class RagOrchestrator:
+    """
+    Central control flow for TAG queries.
+    """
+
+    def __init__(
+        self,
+        db,
+        llm,
+        hyde: HydeGenerator,
+        instructor: InstructorClient,
+        planner: Planner,
+        executors: SQLExecutors,
+    ):
+        self.db = db
+        self.llm = llm
+        self.hyde = hyde
+        self.instructor = instructor
+        self.planner = planner
+        self.executors = executors
+
+        # 🔒 Adapter registry (frozen)
+        self.node_adapters = {
+            "policy_by_address": IntervalPolicyNodeAdapter(),
+            "policy_list": EntityListNodeAdapter(),
+            "project_list": EntityListNodeAdapter(),
+            "project_count": ScalarNodeAdapter(),
+            "mpu_count": ScalarNodeAdapter(),
+        }
+
+        self.response_synthesizer = self._build_synthesizer()
+
+    # -------------------------------------------------
+    # Public entrypoint
+    # -------------------------------------------------
+    def run(self, user_query: str) -> Dict[str, Any]:
+        logger.info("RAG Orchestrator invoked")
+
+        # 1️⃣ HYDE
+        hyde_text = self.hyde.generate(user_query)
+
+        # 2️⃣ Instructor → QueryFacts
+        facts: QueryFacts = self.instructor.extract(user_query, hyde_text)
+
+        # 3️⃣ Planner → ExecutionPlan
+        plan = self.planner.build(facts)
+
+        # 4️⃣ Execute plan
+        raw_result = self._execute(plan)
+
+        # 5️⃣ Convert to Nodes
+        nodes = self._to_nodes(plan.executor, raw_result)
+
+        # 6️⃣ Synthesize response
+        response = self.response_synthesizer.synthesize(
+            query=user_query,
+            nodes=nodes,
+        )
+
+        return {
+            "answer": str(response),
+            "confidence": self._confidence(nodes),
+            "sources": self._sources(nodes),
+        }
+
+    # -------------------------------------------------
+    # Execution
+    # -------------------------------------------------
+    def _execute(self, plan):
+        logger.debug(f"Executing plan: {plan.executor}")
+        executor_fn = getattr(self.executors, plan.executor)
+        return executor_fn(plan.params)
+
+    # -------------------------------------------------
+    # Node conversion
+    # -------------------------------------------------
+    def _to_nodes(self, executor_name: str, rows: Any) -> List[NodeWithScore]:
+        adapter = self.node_adapters.get(executor_name)
+        if not adapter:
+            raise RuntimeError(f"No NodeAdapter registered for {executor_name}")
+
+        return adapter.to_nodes(rows)
+
+    # -------------------------------------------------
+    # Synthesizer
+    # -------------------------------------------------
+    def _build_synthesizer(self) -> ResponseSynthesizer:
+        system_prompt = PromptTemplate(
+            """
+You are a policy analysis assistant.
+
+Rules:
+- Use only provided context.
+- If multiple regions conflict, explain why.
+- If no data exists, say so explicitly.
+- Do not hallucinate.
+"""
+        )
+
+        return ResponseSynthesizer.from_args(
+            llm=self.llm,
+            system_prompt=system_prompt,
+            response_mode="compact",
+        )
+
+    # -------------------------------------------------
+    # Confidence + sources
+    # -------------------------------------------------
+    def _confidence(self, nodes: List[NodeWithScore]) -> float:
+        if not nodes:
+            return 0.0
+        return min(1.0, sum(n.score or 0.3 for n in nodes) / len(nodes))
+
+    def _sources(self, nodes: List[NodeWithScore]) -> List[dict]:
+        return [n.node.metadata for n in nodes]
+
+
+
+
+
+
+
+
+
+
 class ScalarNodeAdapter:
     @staticmethod
     def to_nodes(result: dict, *, entity: str, metric: str):
