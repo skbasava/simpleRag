@@ -1,3 +1,41 @@
+from typing import Optional, Sequence
+from llama_index.core.llms import LLM
+from llama_index.core.llms.callbacks import llm_completion_callback
+from llama_index.core.llms.types import CompletionResponse, LLMMetadata
+
+
+class QGenieLLM(LLM):
+    def __init__(self, client, model: str):
+        self._client = client
+        self._model = model
+
+    @property
+    def metadata(self) -> LLMMetadata:
+        return LLMMetadata(
+            model_name=self._model,
+            context_window=8192,
+            num_output=512,
+            is_chat_model=True,
+        )
+
+    @llm_completion_callback()
+    def complete(self, prompt: str, **kwargs) -> CompletionResponse:
+        resp = self._client.complete(
+            prompt=prompt,
+            model=self._model,
+        )
+        return CompletionResponse(text=resp)
+
+    @llm_completion_callback()
+    def stream_complete(self, prompt: str, **kwargs):
+        for chunk in self._client.stream(prompt, model=self._model):
+            yield CompletionResponse(text=chunk)
+
+
+
+
+
+
 from typing import Dict, List, Any
 import logging
 
