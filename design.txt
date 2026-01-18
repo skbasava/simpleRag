@@ -1,3 +1,38 @@
+
+result = await orch.run_query(user_message)
+
+content = (
+    result.answer
+    if hasattr(result, "answer")
+    else result.get("text", "")
+)
+
+return {
+    "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
+    "object": "chat.completion",
+    "created": int(time.time()),
+    "model": request.model,
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": content,
+            },
+            "finish_reason": "stop",
+        }
+    ],
+    "usage": {
+        "prompt_tokens": len(user_message.split()),
+        "completion_tokens": len(content.split()),
+        "total_tokens": len(user_message.split()) + len(content.split()),
+    },
+}
+
+
+
+
+
 from typing import Optional, Sequence
 from llama_index.core.llms import LLM
 from llama_index.core.llms.callbacks import llm_completion_callback
