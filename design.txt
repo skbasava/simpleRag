@@ -1,3 +1,12 @@
+curl http://rag-query:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tag-service",
+    "messages": [
+      {"role": "system", "content": "test"},
+      {"role": "user", "content": "what is XPU?"}
+    ]
+  }'
 
 SYSTEM_PROMPT = """
 You are a domain-specific RAG assistant.
