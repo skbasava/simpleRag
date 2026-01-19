@@ -1,3 +1,45 @@
+
+import time
+import uuid
+from fastapi.responses import JSONResponse
+
+def build_openai_chat_response(result, request):
+    """
+    Converts RAG output into OpenAI-compatible /v1/chat/completions response.
+    SAFE for TAG + non-TAG.
+    """
+
+    text = getattr(result, "text", "") or ""
+
+    # Token estimation (cheap + demo-safe)
+    prompt_tokens = len(request.messages[-1]["content"].split()) * 4 // 3
+    completion_tokens = len(text.split()) * 4 // 3
+
+    response = {
+        "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": request.model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": text
+                },
+                "finish_reason": "stop"
+            }
+        ],
+        "usage": {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens
+        }
+    }
+
+    return JSONResponse(content=response)
+
+
 curl http://rag-query:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
