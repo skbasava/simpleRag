@@ -1,4 +1,25 @@
 
+def validate_execution_result(result: dict):
+    assert "mode" in result, "ExecutionResult missing 'mode'"
+
+    if result["mode"] == "TEXT":
+        assert isinstance(result.get("text"), str), \
+            "TEXT mode requires non-empty 'text'"
+        assert not result.get("rows"), \
+            "TEXT mode must not return rows"
+
+    elif result["mode"] == "ROWS":
+        assert isinstance(result.get("rows"), list), \
+            "ROWS mode requires 'rows' list"
+        assert not result.get("text"), \
+            "ROWS mode must not return text"
+
+    else:
+        raise ValueError(f"Unknown execution mode: {result['mode']}")
+
+
+
+
 import time
 import uuid
 from fastapi.responses import JSONResponse
