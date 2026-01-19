@@ -1,4 +1,27 @@
 
+Examples:
+
+"Give me MPU access policy details for address 0xEF01000"
+→ intent = POLICY_LOOKUP
+→ operation = LOOKUP
+→ entity = [ADDRESS]
+→ address = 0xEF01000
+
+"What projects are supported?"
+→ intent = CATALOG_LIST
+→ operation = LIST
+→ entity = [PROJECT]
+
+"How many policies exist in KAANAPALI?"
+→ intent = COUNT_STATS
+→ operation = COUNT
+→ project = "KAANAPALI"
+
+"What is XPU architecture?"
+→ intent = EXPLAIN_TEXT
+→ operation = EXPLAIN
+
+
 def validate_execution_result(result: dict):
     assert "mode" in result, "ExecutionResult missing 'mode'"
 
