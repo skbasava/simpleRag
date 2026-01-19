@@ -1,3 +1,11 @@
+SYSTEM_PROMPT = """
+You are a domain-specific RAG assistant.
+- Answer based only on retrieved data when available.
+- If data is missing, clearly say so.
+- Be concise and structured.
+- Never hallucinate register or address values.
+"""
+
 
 import chainlit as cl
 from langchain.chat_models import ChatOpenAI
