@@ -1,3 +1,58 @@
+version: "3.9"
+
+services:
+  rag-query:
+    container_name: rag-query
+    build:
+      context: ./rag
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    networks:
+      - rag-net
+
+  postgres:
+    image: postgres:15
+    container_name: rag-postgres
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+      POSTGRES_DB: ragdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - rag-net
+
+  chainlit:
+    container_name: rag-chainlit
+    build:
+      context: ./chainlit
+    ports:
+      - "8000:8000"
+    depends_on:
+      - rag-query
+    environment:
+      - RAG_URL=http://rag-query:3000/v1/chat/completions
+    networks:
+      - rag-net
+
+volumes:
+  pgdata:
+
+networks:
+  rag-net:
+    driver: bridge
+
+
+
+
+
+
+
+
 
 result = await orch.run_query(user_message)
 
