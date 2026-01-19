@@ -1,3 +1,36 @@
+
+import chainlit as cl
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema.runnable.config import RunnableConfig
+
+@cl.on_chat_start
+async def start():
+    # Create prompt template with system message
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are a helpful assistant specialized in {domain}."),
+        ("human", "{question}")
+    ])
+    
+    model = ChatOpenAI(model="gpt-3.5-turbo")
+    runnable = prompt | model
+    
+    cl.user_session.set("runnable", runnable)
+
+@cl.on_message
+async def main(message: cl.Message):
+    runnable = cl.user_session.get("runnable")
+    
+    response = await runnable.ainvoke(
+        {"domain": "Python programming", "question": message.content},
+        config=RunnableConfig(callbacks=[cl.LangchainCallbackHandler()])
+    )
+    
+    await cl.Message(content=response.content).send()
+
+
+
+
 version: "3.9"
 
 services:
