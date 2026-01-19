@@ -1,3 +1,37 @@
+
+SYSTEM_PROMPT = """
+You are a domain-specific RAG assistant.
+
+Rules:
+- If structured data (TAG/DB results) is available, explain it clearly.
+- If the query is informational, answer concisely.
+- Never hallucinate addresses, registers, or policy ranges.
+- If confidence or explainability is unavailable, omit them gracefully.
+"""
+
+def build_messages(history):
+    """
+    Convert stored history into OpenAI-style messages
+    """
+
+    messages = [
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT
+        }
+    ]
+
+    for h in history:
+        messages.append({
+            "role": h["role"],
+            "content": h["content"]
+        })
+
+    return messages
+
+
+
+
 SYSTEM_PROMPT = """
 You are a domain-specific RAG assistant.
 - Answer based only on retrieved data when available.
