@@ -1,3 +1,97 @@
+from enum import Enum
+from typing import Optional
+from pydantic import BaseModel, Field
+
+class Intent(str, Enum):
+    POLICY_LOOKUP = "POLICY_LOOKUP"
+    POLICY_LIST = "POLICY_LIST"
+    CATALOG_LIST = "CATALOG_LIST"
+    EXPLAIN_TEXT = "EXPLAIN_TEXT"
+    UNKNOWN = "UNKNOWN"
+
+class Operation(str, Enum):
+    LOOKUP = "LOOKUP"
+    LIST = "LIST"
+    COUNT = "COUNT"
+    COMPARE = "COMPARE"
+    EXPLAIN = "EXPLAIN"
+    UNKNOWN = "UNKNOWN"
+
+
+class Entity(str, Enum):
+    POLICY = "POLICY"
+    PROJECT = "PROJECT"
+    VERSION = "VERSION"
+    REGION = "REGION"
+    ADDRESS = "ADDRESS"
+    UNKNOWN = "UNKNOWN"
+
+class QueryFacts(BaseModel):
+    """
+    QueryFacts is a PURE extraction object.
+
+    It contains ONLY facts explicitly present in the user query.
+    No validation, inference, or enforcement happens here.
+    """
+
+    # --- classification ---
+    intent: Intent = Field(
+        default=Intent.UNKNOWN,
+        description="Why the system is invoked"
+    )
+
+    operation: Operation = Field(
+        default=Operation.UNKNOWN,
+        description="How the user phrased the request"
+    )
+
+    entity: Entity = Field(
+        default=Entity.UNKNOWN,
+        description="Primary domain object referenced"
+    )
+
+    # --- selectors / filters ---
+    project: Optional[str] = Field(
+        default=None,
+        description="Project name if explicitly mentioned"
+    )
+
+    region: Optional[str] = Field(
+        default=None,
+        description="Region name if explicitly mentioned"
+    )
+
+    version: Optional[str] = Field(
+        default=None,
+        description="Version identifier if explicitly mentioned"
+    )
+
+    # --- address semantics ---
+    addr_start: Optional[int] = Field(
+        default=None,
+        description="Start address in decimal (single address or range start)"
+    )
+
+    addr_end: Optional[int] = Field(
+        default=None,
+        description="End address in decimal (only if range explicitly provided)"
+    )
+
+    # --- raw provenance ---
+    raw_query: Optional[str] = Field(
+        default=None,
+        description="Original user query (verbatim)"
+    )
+
+
+
+
+
+
+
+
+
+
 You are a STRICT but NON-JUDGMENTAL structured facts extraction engine.
 
 Your ONLY responsibility is to extract explicit, surface-level facts
