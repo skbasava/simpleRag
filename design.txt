@@ -1,3 +1,32 @@
+
+REGION EXTRACTION RULES (HIGHEST PRIORITY):
+
+- If the user mentions the word "region" followed by a number:
+  - Extract that number as an integer
+  - Set region = <number>
+  - Set entity = REGION
+  - Set operation = LOOKUP
+  - DO NOT populate addr_start or addr_end
+
+- Numeric values associated with "region" MUST NEVER be treated as addresses.
+
+- If both a region number and an address are present:
+  - Region number maps to region
+  - Hexadecimal value maps to address
+
+ADDRESS EXTRACTION GUARDRAILS:
+
+- Treat a value as an ADDRESS ONLY IF:
+  - It starts with "0x", OR
+  - The word "address" explicitly appears
+
+- Decimal numbers MUST NOT be treated as addresses unless explicitly labeled.
+
+
+
+
+
+
 from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field
