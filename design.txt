@@ -1,4 +1,114 @@
 
+# rag/executors/sql_helpers.py
+
+def regions_by_project(project: str, mpu_name: str | None = None):
+    base = """
+        SELECT DISTINCT region
+        FROM mpu_regions
+        WHERE project = :project
+    """
+    params = {"project": project}
+
+    if mpu_name:
+        base += " AND mpu_name = :mpu_name"
+        params["mpu_name"] = mpu_name
+
+    base += " ORDER BY region"
+    return base, params
+
+def region_count_by_project(project: str, mpu_name: str | None = None):
+    base = """
+        SELECT COUNT(DISTINCT region) AS count
+        FROM mpu_regions
+        WHERE project = :project
+    """
+    params = {"project": project}
+
+    if mpu_name:
+        base += " AND mpu_name = :mpu_name"
+        params["mpu_name"] = mpu_name
+
+    return base, params
+
+# rag/executors/region_list.py
+
+from rag.executors.base import BaseExecutor
+from rag.query_helpers.models import QueryFacts
+from rag.executors.sql_helpers import regions_by_project
+
+
+class RegionListExecutor(BaseExecutor):
+    name = "region_list"
+
+    def execute(self, facts: QueryFacts):
+        project = facts.project
+        mpu_name = facts.mpu_name
+
+        if not project:
+            return self.fail("project is required")
+
+        sql, params = regions_by_project(project, mpu_name)
+        rows = self.run_query(sql, params)
+
+        if not rows:
+            return {
+                "mode": "TEXT",
+                "text": None,
+                "rows": [],
+                "confidence": 0.0,
+                "explainability": "No regions found for the given project/MPU.",
+                "sources": ["mpu_regions"],
+            }
+
+        regions = [r["region"] for r in rows]
+
+        return {
+            "mode": "LIST",
+            "text": None,
+            "rows": regions,
+            "confidence": 1.0,
+            "explainability": f"Regions supported in project {project}"
+            + (f" for MPU {mpu_name}" if mpu_name else ""),
+            "sources": ["mpu_regions"],
+        }
+# rag/executors/region_count.py
+
+from rag.executors.base import BaseExecutor
+from rag.query_helpers.models import QueryFacts
+from rag.executors.sql_helpers import region_count_by_project
+
+
+class RegionCountExecutor(BaseExecutor):
+    name = "region_count"
+
+    def execute(self, facts: QueryFacts):
+        project = facts.project
+        mpu_name = facts.mpu_name
+
+        if not project:
+            return self.fail("project is required")
+
+        sql, params = region_count_by_project(project, mpu_name)
+        rows = self.run_query(sql, params)
+
+        count = rows[0]["count"] if rows else 0
+
+        return {
+            "mode": "TEXT",
+            "text": str(count),
+            "rows": None,
+            "confidence": 1.0,
+            "explainability": f"Number of regions in project {project}"
+            + (f" for MPU {mpu_name}" if mpu_name else ""),
+            "sources": ["mpu_regions"],
+        }
+
+
+
+
+
+
+
 REGION EXTRACTION RULES (HIGHEST PRIORITY):
 
 - If the user mentions the word "region" followed by a number:
