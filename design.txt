@@ -1,4 +1,11 @@
 
+curl -v \
+  -X POST \
+  https://ipcatalog-api.qualcomm.com/api/1/auth/token/login/ \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data "username=YOUR_USERNAME&password=YOUR_PASSWORD"
+
+
 # rag/executors/sql_helpers.py
 
 def regions_by_project(project: str, mpu_name: str | None = None):
