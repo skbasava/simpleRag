@@ -1,3 +1,107 @@
+import io
+import json
+import time
+import zipfile
+from itertools import islice
+
+
+def fetch_policy_export_paginated(
+    client,
+    export_id,
+    export_token,
+    page_size=500,
+    poll_interval=5,
+    timeout=300,
+):
+    """
+    Yields paginated policy records from a large async export.
+
+    Yields:
+        list[dict]  # page_size chunk
+    """
+
+    # ---- 1. Wait until export is ready ----
+    start = time.time()
+
+    while True:
+        resp = client.request(
+            "GET",
+            api=f"xpu/policy/export/{export_id}/",
+            params={"raw": True, "token": export_token},
+            response="raw",
+        )
+
+        if resp.status_code == 202:
+            if time.time() - start > timeout:
+                raise TimeoutError("Export generation timed out")
+            time.sleep(poll_interval)
+            continue
+
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"Export failed: {resp.status_code} - {resp.content[:200]}"
+            )
+
+        break  # ready
+
+    # ---- 2. Load content into memory ----
+    content = resp.content
+    content_type = resp.headers.get("content-type", "").lower()
+
+    # ---- 3. Extract JSON records ----
+    records = None
+
+    # Case A: ZIP export
+    if "application/zip" in content_type or content.startswith(b"PK\x03\x04"):
+        with zipfile.ZipFile(io.BytesIO(content)) as z:
+            for name in z.namelist():
+                if name.endswith(".json"):
+                    with z.open(name) as f:
+                        data = json.load(f)
+
+                        # normalize structure
+                        if isinstance(data, list):
+                            records = data
+                        elif isinstance(data, dict):
+                            records = (
+                                data.get("policies")
+                                or data.get("items")
+                                or data.get("data")
+                            )
+
+                        if records:
+                            break
+
+        if records is None:
+            raise RuntimeError("No JSON records found in export ZIP")
+
+    # Case B: Direct JSON
+    else:
+        data = json.loads(content.decode())
+        if isinstance(data, list):
+            records = data
+        elif isinstance(data, dict):
+            records = (
+                data.get("policies")
+                or data.get("items")
+                or data.get("data")
+            )
+
+    if not records:
+        raise RuntimeError("No paginatable records found")
+
+    # ---- 4. Paginate (generator) ----
+    it = iter(records)
+
+    while True:
+        page = list(islice(it, page_size))
+        if not page:
+            break
+        yield page
+
+
+
+
 
 import io
 import json
