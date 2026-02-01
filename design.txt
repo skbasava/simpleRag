@@ -1,4 +1,74 @@
 
+import io
+import json
+import zipfile
+
+
+def fetch_parsed_policy_export(client, export_id, export_token):
+    """
+    Downloads an async policy export into memory and returns parsed policy data.
+
+    Returns:
+        dict | list | str
+            Parsed policy data (JSON) or raw text if non-JSON.
+    Raises:
+        RuntimeError on unexpected response or empty export.
+    """
+
+    resp = client.request(
+        "GET",
+        api=f"xpu/policy/export/{export_id}/",
+        params={
+            "raw": True,
+            "token": export_token,
+        },
+        response="raw",
+    )
+
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"Export download failed: {resp.status_code} - {resp.content[:200]}"
+        )
+
+    content_type = resp.headers.get("content-type", "").lower()
+    content = resp.content
+
+    # ---- Case 1: JSON directly returned ----
+    if "application/json" in content_type:
+        return json.loads(content.decode("utf-8"))
+
+    # ---- Case 2: ZIP archive ----
+    if "application/zip" in content_type or content.startswith(b"PK\x03\x04"):
+        zip_bytes = io.BytesIO(content)
+
+        parsed = {}
+
+        with zipfile.ZipFile(zip_bytes) as z:
+            if not z.namelist():
+                raise RuntimeError("Export ZIP is empty")
+
+            for name in z.namelist():
+                with z.open(name) as f:
+                    if name.endswith(".json"):
+                        parsed[name] = json.load(f)
+                    else:
+                        parsed[name] = f.read().decode(errors="ignore")
+
+        return parsed
+
+    # ---- Case 3: Fallback (text / unknown) ----
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError:
+        return content
+
+
+
+
+
+
+
+
 curl -v \
   -X POST \
   https://ipcatalog-api.qualcomm.com/api/1/auth/token/login/ \
