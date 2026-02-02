@@ -1,4 +1,98 @@
 
+from typing import Generator, List
+import time
+import math
+import xml.etree.ElementTree as ET
+
+
+def fetch_parsed_policy_export(
+    self,
+    export_id: int | str,
+    export_token: str,
+    *,
+    page_size: int = 500,
+    poll_interval: int = 5,
+    timeout: int = 300,
+) -> Generator[List[ET.Element], None, None]:
+    """
+    Polls an async xPU policy export, parses XML, and yields paginated XML elements.
+
+    Yields:
+        List[ET.Element]: A page of repeating XML elements (policies / regions).
+
+    Raises:
+        TimeoutError: If export generation exceeds timeout.
+        RuntimeError: If response is invalid or empty.
+    """
+
+    url = join_url(self.base_url, f"xpu/policy/export/{export_id}/")
+    start = time.time()
+
+    # ---- Poll until XML is ready ----
+    while True:
+        resp = self.request(
+            "GET",
+            api=url,
+            params={"raw": True, "token": export_token},
+            response="raw",
+        )
+
+        status = resp.status_code
+        ctype = resp.headers.get("content-type", "").lower()
+
+        logger.info(f"Export poll status={status}, content-type={ctype}")
+
+        if status == 202:
+            if time.time() - start > timeout:
+                raise TimeoutError("Policy export generation timed out")
+            time.sleep(poll_interval)
+            continue
+
+        if status != 200:
+            raise RuntimeError(f"Unexpected export status {status}")
+
+        if "xml" not in ctype:
+            # still preparing file
+            time.sleep(poll_interval)
+            continue
+
+        break  # XML ready
+
+    # ---- Parse XML ----
+    try:
+        root = ET.fromstring(resp.content)
+    except ET.ParseError as e:
+        raise RuntimeError("Failed to parse policy XML") from e
+
+    tag, elements = finding_repeating_elements(root)
+
+    if not elements:
+        logger.info("Single XML document detected (no repeating elements)")
+        yield [root]
+        return
+
+    total = len(elements)
+    max_pages = math.ceil(total / page_size)
+
+    logger.info(
+        "Parsed policy XML: tag=%s total_elements=%d pages=%d",
+        tag,
+        total,
+        max_pages,
+    )
+
+    # ---- Yield paginated results ----
+    for page in range(max_pages):
+        start_idx = page * page_size
+        end_idx = min(start_idx + page_size, total)
+        yield elements[start_idx:end_idx]
+
+
+
+
+
+
+
 def select_xpu_policy(
     policies: List[XPUPolicy],
     requested_version: Optional[str] = None
