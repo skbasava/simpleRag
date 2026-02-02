@@ -1,3 +1,47 @@
+class IPCatalogClient:
+    def __init__(self, base_url, token_manager: TokenManager):
+        self.base_url = base_url.rstrip("/")
+        self.token_manager = token_manager
+
+    def request(self, method: str, api: str, **kwargs):
+        token = self.token_manager.get_token()
+
+        headers = kwargs.pop("headers", {})
+        headers["Authorization"] = f"Bearer {token}"
+
+        url = f"{self.base_url}{api}"
+
+        resp = requests.request(
+            method,
+            url,
+            headers=headers,
+            timeout=15,
+            **kwargs
+        )
+
+        if resp.status_code in (401, 403):
+            # Token invalid → refresh once
+            self.token_manager.invalidate()
+            token = self.token_manager.get_token()
+            headers["Authorization"] = f"Bearer {token}"
+
+            resp = requests.request(
+                method,
+                url,
+                headers=headers,
+                timeout=15,
+                **kwargs
+            )
+
+        resp.raise_for_status()
+        return resp.json()
+
+
+
+
+
+
+
 """
 Central place for Redis key schema.
 Keeps keys consistent and debuggable.
