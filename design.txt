@@ -1,3 +1,26 @@
+
+def select_xpu_policy(
+    policies: List[XPUPolicy],
+    requested_version: Optional[str] = None
+) -> Optional[XPUPolicy]:
+    valid = [
+        p for p in policies
+        if p["published"] and not p["is_deleted"]
+    ]
+
+    if not valid:
+        return None
+
+    if requested_version:
+        for p in valid:
+            if p["version"] == requested_version:
+                return p
+        return None
+
+    # latest published
+    return max(valid, key=lambda p: Version(p["version"]))
+
+
 class IPCatalogClient:
     def __init__(self, base_url, token_manager: TokenManager):
         self.base_url = base_url.rstrip("/")
