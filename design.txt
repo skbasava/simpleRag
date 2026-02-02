@@ -1,3 +1,19 @@
+"""
+Central place for Redis key schema.
+Keeps keys consistent and debuggable.
+"""
+
+CHIP_LIST_KEY = "ipcat:chips:list"
+CHIP_ALIAS_KEY = "ipcat:chip:alias:{chip_name}"
+
+POLICY_INDEX_KEY = "ipcat:xpu:policies:{chip_id}:{version}"
+POLICY_XML_KEY = "ipcat:xpu:policy:xml:{chip_id}:{policy_id}"
+
+MPU_KEY = "ipcat:mpu:{chip_id}:{policy_id}:{mpu_name}"
+
+
+
+
 requests>=2.31.0
 redis>=5.0.1
 lxml>=4.9.3
