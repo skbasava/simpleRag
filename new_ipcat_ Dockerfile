@@ -1,0 +1,30 @@
+# ---------- Base Image ----------
+FROM python:3.11-slim
+
+# ---------- System Settings ----------
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# ---------- Install OS Dependencies ----------
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    gcc \
+    libxml2 \
+    libxml2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---------- Working Directory ----------
+WORKDIR /app
+
+# ---------- Install Python Dependencies ----------
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ---------- Copy Application Code ----------
+COPY . .
+
+# ---------- Default Command ----------
+# Change this if your entry file is different
+CMD ["python", "main.py"]
