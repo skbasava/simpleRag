@@ -1,4 +1,128 @@
 
+from dataclasses import dataclass
+from typing import Optional, Dict, Any
+
+
+@dataclass(frozen=True)
+class ChipFamily:
+    id: int
+    name: str
+    generation: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class ChipType:
+    id: int
+    name: str
+
+
+@dataclass(frozen=True)
+class Chip:
+    id: int
+    name: str
+    family: ChipFamily
+    type: ChipType
+    baseline_chip: Optional[str] = None
+    last_revised: Optional[str] = None
+
+    @staticmethod
+    def from_api(item: Dict[str, Any]) -> "Chip":
+        """
+        Convert raw IPCatalog API JSON → Chip dataclass.
+        Raises KeyError on schema drift.
+        """
+        return Chip(
+            id=item["id"],
+            name=item["name"],
+            family=ChipFamily(
+                id=item["family"]["id"],
+                name=item["family"]["name"],
+                generation=item["family"].get("generation"),
+            ),
+            type=ChipType(
+                id=item["type"]["id"],
+                name=item["type"]["name"],
+            ),
+            baseline_chip=item.get("baseline_chip"),
+            last_revised=item.get("last_revised"),
+        )
+
+CHIP_LIST_KEY = "ipcat:chip:list"
+CHIP_ALIAS_KEY = "ipcat:chip:alias:{name}"
+CHIP_SCHEMA_KEY = "ipcat:chip:schema_version"
+
+CHIP_SCHEMA_VERSION = "v2"   # bump when Chip dataclass changes
+TTL_CHIPS = 36 * 3600
+
+
+def ensure_chips(self):
+    """
+    Ensures chip list exists in Redis.
+    Auto-heals Redis if schema version changed.
+    """
+
+    cached_schema = redis_client.get(CHIP_SCHEMA_KEY)
+    if cached_schema != CHIP_SCHEMA_VERSION:
+        logger.warning(
+            "Chip schema drift detected (redis=%s, code=%s). Flushing chip cache.",
+            cached_schema,
+            CHIP_SCHEMA_VERSION,
+        )
+        self._flush_chip_cache()
+
+    if redis_client.exists(CHIP_LIST_KEY):
+        return
+
+    raw = self.client.list_chips_raw()  # raw JSON
+    chips = []
+
+    for item in raw:
+        try:
+            chip = Chip.from_api(item)
+            chips.append(chip)
+        except KeyError as e:
+            logger.error("Skipping invalid chip entry: %s", item)
+            continue
+
+    if not chips:
+        raise RuntimeError("No valid chips returned from IPCatalog")
+
+    # Store schema version
+    redis_client.set(CHIP_SCHEMA_KEY, CHIP_SCHEMA_VERSION)
+
+    # Store chip IDs list
+    redis_client.setex(
+        CHIP_LIST_KEY,
+        TTL_CHIPS,
+        ",".join(str(c.id) for c in chips),
+    )
+
+    # Store alias → id mapping
+    for chip in chips:
+        redis_client.setex(
+            CHIP_ALIAS_KEY.format(name=chip.name.lower()),
+            TTL_CHIPS,
+            chip.id,
+        )
+
+    logger.info("Cached %d chips in Redis", len(chips))
+
+
+
+def _flush_chip_cache(self):
+    for key in redis_client.scan_iter("ipcat:chip:*"):
+        redis_client.delete(key)
+
+
+def print_chips(chips: list[Chip]) -> None:
+    print("\n=== IPCatalog Chips ===")
+    for c in chips:
+        print(
+            f"- {c.name} "
+            f"(id={c.id}, family={c.family.name}, type={c.type.name})"
+        )
+
+
 from typing import List, Dict, Any
 
 Chip = Dict[str, Any]
