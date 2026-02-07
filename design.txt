@@ -1,4 +1,44 @@
 
+from typing import List, Dict, Any
+
+Chip = Dict[str, Any]
+
+def list_chips(self) -> List[Chip]:
+    data = self.request("GET", "/chip")
+
+    if not isinstance(data, list):
+        raise TypeError(f"Expected list from /chip, got {type(data)}")
+
+    valid_chips: List[Chip] = []
+
+    for i, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise TypeError(f"Item {i} is not a dict: {item!r}")
+
+        # Required fields per IPCatalog API
+        required_keys = {"id", "name", "family", "type"}
+        missing = required_keys - item.keys()
+
+        if missing:
+            raise KeyError(
+                f"Chip item {i} missing keys {missing}. Full item={item!r}"
+            )
+
+        # Validate nested structures
+        if not isinstance(item["family"], dict) or "name" not in item["family"]:
+            raise KeyError(f"Chip item {i} has invalid family field: {item['family']!r}")
+
+        if not isinstance(item["type"], dict) or "name" not in item["type"]:
+            raise KeyError(f"Chip item {i} has invalid type field: {item['type']!r}")
+
+        valid_chips.append(item)
+
+    return valid_chips
+
+
+
+
+
 from typing import Generator, List
 import time
 import math
