@@ -1,4 +1,15 @@
 
+import re
+
+def normalize_alias(s: str) -> str:
+    s = s.lower()
+    s = re.sub(r"\(.*?\)", "", s)   # drop (rolex)
+    s = re.sub(r"[^a-z0-9]+", "", s)
+    return s
+
+
+
+
 
 def cache_chips(chips: Iterable[Chip]) -> None:
     pipe = redis_client.pipeline(transaction=True)
