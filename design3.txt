@@ -1,0 +1,85 @@
+from dataclasses import dataclass
+from typing import Optional, Any, Dict
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ChipFamily:
+    id: int
+    name: str
+    generation: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class ChipType:
+    id: int
+    name: str
+
+
+@dataclass(frozen=True)
+class Chip:
+    id: int
+    name: str
+    alias: Optional[str]
+    family: Optional[ChipFamily]
+    type: ChipType
+    baseline_chip: Optional[str] = None
+    last_revised: Optional[str] = None
+
+    # ----------------------------
+    # Factory: API → Chip
+    # ----------------------------
+    @staticmethod
+    def from_api(item: Any) -> Optional["Chip"]:
+        """
+        Convert IPCatalog API JSON → Chip dataclass.
+
+        - Idempotent (Chip in → Chip out)
+        - Skips invalid / drifted records safely
+        """
+
+        # ✅ Already parsed (cache-safe)
+        if isinstance(item, Chip):
+            return item
+
+        # ❌ Not JSON
+        if not isinstance(item, dict):
+            logger.warning("Skipping chip: expected dict, got %s", type(item))
+            return None
+
+        try:
+            # ---- family (nullable in API) ----
+            family = None
+            fam = item.get("family")
+            if isinstance(fam, dict):
+                family = ChipFamily(
+                    id=fam["id"],
+                    name=fam["name"],
+                    generation=fam.get("generation"),
+                )
+
+            # ---- type (required) ----
+            type_obj = item["type"]
+            chip_type = ChipType(
+                id=type_obj["id"],
+                name=type_obj["name"],
+            )
+
+            return Chip(
+                id=item["id"],
+                name=item["name"],
+                alias=item.get("alias"),          # VERY IMPORTANT
+                family=family,
+                type=chip_type,
+                baseline_chip=item.get("baseline_chip"),
+                last_revised=item.get("last_revised"),
+            )
+
+        except KeyError as e:
+            logger.warning(
+                "Skipping chip due to schema drift: missing %s | item=%r",
+                e, item
+            )
+            return None
