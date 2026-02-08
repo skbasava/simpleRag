@@ -1,4 +1,37 @@
 
+
+def cache_chips(chips: Iterable[Chip]) -> None:
+    pipe = redis_client.pipeline(transaction=True)
+
+    # Store full list
+    payload = [c.to_dict() for c in chips]
+    pipe.setex(
+        CHIP_LIST_KEY,
+        TTL_CHIPS,
+        json.dumps(payload),
+    )
+
+    for chip in chips:
+        # Store per-chip object
+        pipe.setex(
+            CHIP_ID_KEY.format(chip_id=chip.id),
+            TTL_CHIPS,
+            json.dumps(chip.to_dict()),
+        )
+
+        # Index by name + optional alias
+        for key in _chip_keys(chip):
+            pipe.setex(
+                CHIP_ALIAS_KEY.format(chip_name=key),
+                TTL_CHIPS,
+                chip.id,
+            )
+
+    pipe.execute()
+
+
+
+
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
 
