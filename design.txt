@@ -1,4 +1,53 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import xml.etree.ElementTree as ET
 
+def ingest_mpus(
+    xml_text: str,
+    chip: str,
+    version: str,
+    redis_client,
+    max_workers: int = 8,
+) -> None:
+    root = ET.fromstring(xml_text)
+    mpu_elems = root.findall(".//MPU")
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(
+                ingest_single_mpu,
+                mpu_elem,
+                chip,
+                version,
+                redis_client,
+            )
+            for mpu_elem in mpu_elems
+        ]
+
+        # Fail fast if any MPU ingestion fails
+        for future in as_completed(futures):
+            future.result()
+
+def ingest_single_mpu(
+    mpu_elem: ET.Element,
+    chip: str,
+    version: str,
+    redis_client,
+) -> None:
+    mpu_name = mpu_elem.attrib["name"]
+
+    hw = extract_hw_parameters(mpu_elem)
+
+    redis_key = f"ipcat:mpu:{chip}:{version}:{mpu_name}"
+
+    redis_client.set(
+        redis_key,
+        json.dumps({
+            "mpu": mpu_name,
+            "chip": chip,
+            "version": version,
+            "hw": hw,
+        })
+    )
 
 # backend/ingestion/xml_parser.py
 from typing import Dict
