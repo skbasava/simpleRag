@@ -1,4 +1,59 @@
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import xml.etree.ElementTree as ET
+from .models import Policy
+from .redis_store import (
+    cache_chip, cache_policies,
+    bloom_add, bloom_exists
+)
+from .ipcatalog import IPCatalogClient
+
+EXECUTOR = ThreadPoolExecutor(max_workers=8)
+SEMAPHORE = asyncio.Semaphore(4)
+
+def parse_mpu(xml_text, chip, version, mpu):
+    root = ET.fromstring(xml_text)
+    policies = []
+    for rg in root.findall(f".//MPU[@name='{mpu}']/Region"):
+        region = int(rg.attrib["id"])
+        policies.append(
+            Policy(
+                chip=chip,
+                version=version,
+                mpu=mpu,
+                region=region,
+                raw_text=ET.tostring(rg, encoding="unicode"),
+            )
+        )
+    return policies
+
+async def ingest_chip(chip: str, version: str, client: IPCatalogClient):
+    if bloom_exists(chip, version):
+        return
+
+    async with aiohttp.ClientSession() as session:
+        xml = await client.get(session, f"/xpu/policy/export?chip={chip}&version={version}")
+        mpus = extract_mpus(xml)  # simple XPath
+
+        loop = asyncio.get_event_loop()
+        all_policies = []
+
+        for mpu in mpus:
+            async with SEMAPHORE:
+                policies = await loop.run_in_executor(
+                    EXECUTOR, parse_mpu, xml, chip, version, mpu
+                )
+                all_policies.extend(policies)
+
+        cache_policies(all_policies)
+        bloom_add(chip, version)
+
+
+
+
+
+
 import aiohttp
 import time
 import json
