@@ -1,3 +1,54 @@
+import asyncio
+import logging
+import redis
+
+from ipcatalog.client import IPCatalogClient
+from orchestrator import PolicyOrchestrator
+
+logging.basicConfig(level=logging.INFO)
+
+REDIS_HOST = "localhost"
+REDIS_PORT = 6379
+
+
+async def main():
+    # Redis
+    redis_client = redis.Redis(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        decode_responses=True,
+    )
+
+    # IPCatalog API client
+    ipcat = IPCatalogClient(
+        base_url="https://ipcatalog-api.qualcomm.com/api/1",
+    )
+
+    orchestrator = PolicyOrchestrator(
+        redis_client=redis_client,
+        ipcat_client=ipcat,
+    )
+
+    # --- STEP 1: Ensure chip list (TTL driven) ---
+    await orchestrator.ensure_chip_list()
+    print("✅ Chip list ready")
+
+    # --- STEP 2: Fetch MPU policy ---
+    result = await orchestrator.get_policy_by_mpu(
+        chip_name="kaanapalli",
+        version="v3",
+        mpu_name="AOSS_MPU",
+    )
+
+    print("\n=== MPU POLICY ===")
+    print(result)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
+
+
 
 
 import asyncio
