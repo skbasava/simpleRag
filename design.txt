@@ -1,4 +1,48 @@
 
+import aiohttp
+import time
+import json
+from pathlib import Path
+
+TOKEN_FILE = Path("/tmp/ipcat.token")
+
+class IPCatalogClient:
+    def __init__(self, base_url, username, password):
+        self.base = base_url
+        self.username = username
+        self.password = password
+        self.token = None
+
+    async def _load_token(self):
+        if TOKEN_FILE.exists():
+            self.token = TOKEN_FILE.read_text().strip()
+
+    async def _save_token(self):
+        TOKEN_FILE.write_text(self.token)
+
+    async def _fetch_token(self, session):
+        async with session.post(
+            f"{self.base}/auth/login",
+            json={"username": self.username, "password": self.password},
+        ) as r:
+            data = await r.json()
+            self.token = data["token"]
+            await self._save_token()
+
+    async def get(self, session, path):
+        if not self.token:
+            await self._load_token()
+        headers = {"Authorization": f"Bearer {self.token}"}
+        async with session.get(f"{self.base}{path}", headers=headers) as r:
+            if r.status == 401:
+                await self._fetch_token(session)
+                return await self.get(session, path)
+            return await r.json()
+
+
+
+
+
 import re
 
 def normalize_alias(s: str) -> str:
