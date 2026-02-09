@@ -1,4 +1,43 @@
 
+
+# backend/ingestion/xml_parser.py
+from typing import Dict
+import xml.etree.ElementTree as ET
+
+def extract_hw_parameters(mpu_elem: ET.Element) -> Dict[str, Dict[str, str]]:
+    """
+    Extract HWDesignParameters and HWIntegrationParameters
+    for a single MPU element.
+    """
+
+    result = {
+        "design": {},
+        "integration": {},
+    }
+
+    hw_cfg = mpu_elem.find("HWConfig")
+    if hw_cfg is None:
+        return result
+
+    design = hw_cfg.find("HWDesignParameters")
+    if design is not None:
+        for p in design.findall("Parameter"):
+            name = p.attrib.get("name")
+            value = p.attrib.get("value")
+            if name and value is not None:
+                result["design"][name] = value
+
+    integration = hw_cfg.find("HWIntegrationParameters")
+    if integration is not None:
+        for p in integration.findall("Parameter"):
+            name = p.attrib.get("name")
+            value = p.attrib.get("value")
+            if name and value is not None:
+                result["integration"][name] = value
+
+    return result
+
+
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import xml.etree.ElementTree as ET
