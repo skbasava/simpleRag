@@ -1,3 +1,175 @@
+
+
+import asyncio
+import json
+import logging
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, List
+
+from ipcatalog.ingest import (
+    fetch_chip_xml,
+    extract_mpus,
+    ingest_single_mpu,   # single MPU → hw + regions
+)
+from ipcatalog.redis_keys import (
+    CHIP_LIST_KEY,
+    CHIP_ALIAS_KEY,
+    INGEST_LOCK_KEY,
+    INGEST_DONE_KEY,
+    MPU_KEY,
+)
+
+logger = logging.getLogger("orchestrator")
+
+EXECUTOR = ThreadPoolExecutor(max_workers=8)
+
+LOCK_TTL = 60            # seconds
+DONE_TTL = 24 * 3600     # 1 day
+
+
+class PolicyOrchestrator:
+    """
+    Thin decision-making layer.
+    No parsing.
+    No Redis schema logic.
+    No XML knowledge.
+    """
+
+    def __init__(self, redis_client, ipcat_client):
+        self.redis = redis_client
+        self.client = ipcat_client
+
+    # ==========================================================
+    # PUBLIC ENTRY POINT
+    # ==========================================================
+    async def get_policy_by_mpu(
+        self,
+        chip_name: str,
+        version: str,
+        mpu_name: str,
+    ) -> Dict[str, Any]:
+        """
+        Main API entry point.
+        """
+
+        chip_name = chip_name.lower()
+        mpu_name = mpu_name.upper()
+
+        chip_id = self._resolve_chip_id(chip_name)
+        if not chip_id:
+            raise ValueError(f"No chip found for chipname: {chip_name}")
+
+        await self._ensure_ingested(chip_name, version)
+
+        key = MPU_KEY.format(
+            chip=chip_name,
+            version=version,
+            mpu=mpu_name,
+        )
+
+        raw = self.redis.get(key)
+        if not raw:
+            raise KeyError(f"MPU not found: {mpu_name}")
+
+        return json.loads(raw)
+
+    # ==========================================================
+    # INGESTION ORCHESTRATION
+    # ==========================================================
+    async def _ensure_ingested(self, chip: str, version: str) -> None:
+        """
+        Cache-miss / TTL based ingestion trigger.
+        """
+
+        done_key = INGEST_DONE_KEY.format(chip=chip, version=version)
+        lock_key = INGEST_LOCK_KEY.format(chip=chip, version=version)
+
+        # Fast path
+        if self.redis.exists(done_key):
+            return
+
+        # Someone else is ingesting
+        if not self.redis.set(lock_key, 1, nx=True, ex=LOCK_TTL):
+            logger.info("Ingestion already in progress: %s %s", chip, version)
+            return
+
+        try:
+            logger.info("Starting ingestion: %s %s", chip, version)
+            await self._ingest_chip(chip, version)
+            self.redis.set(done_key, 1, ex=DONE_TTL)
+
+        finally:
+            self.redis.delete(lock_key)
+
+    async def _ingest_chip(self, chip: str, version: str) -> None:
+        """
+        Fetch XML → list MPUs → ingest each MPU (threaded).
+        """
+
+        xml_text = await fetch_chip_xml(self.client, chip, version)
+        mpus = extract_mpus(xml_text)
+
+        loop = asyncio.get_running_loop()
+        tasks = []
+
+        for mpu in mpus:
+            tasks.append(
+                loop.run_in_executor(
+                    EXECUTOR,
+                    ingest_single_mpu,
+                    xml_text,
+                    chip,
+                    version,
+                    mpu,
+                    self.redis,
+                )
+            )
+
+        # Fail fast if any MPU fails
+        for t in asyncio.as_completed(tasks):
+            await t
+
+        logger.info("Ingestion complete: %s %s", chip, version)
+
+    # ==========================================================
+    # CHIP RESOLUTION
+    # ==========================================================
+    def _resolve_chip_id(self, chip_name: str) -> str | None:
+        """
+        Resolve chip alias → chip_id via Redis.
+        """
+        key = CHIP_ALIAS_KEY.format(name=chip_name)
+        val = self.redis.get(key)
+        return val.decode() if isinstance(val, bytes) else val
+
+    # ==========================================================
+    # CHIP LIST (TTL-DRIVEN)
+    # ==========================================================
+    async def ensure_chip_list(self) -> None:
+        """
+        Refresh chip list if TTL expired.
+        """
+
+        if self.redis.exists(CHIP_LIST_KEY):
+            return
+
+        logger.info("Refreshing chip list")
+
+        chips = await self.client.list_chips()
+        payload = json.dumps(chips)
+
+        self.redis.setex(CHIP_LIST_KEY, 36 * 3600, payload)
+
+        for c in chips:
+            for name in filter(None, [c["name"], c.get("alias")]):
+                self.redis.setex(
+                    CHIP_ALIAS_KEY.format(name=name.lower()),
+                    36 * 3600,
+                    c["id"],
+                )
+
+
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import xml.etree.ElementTree as ET
 
