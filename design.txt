@@ -1,3 +1,88 @@
+
+
+from packaging.version import Version
+from typing import Optional, Iterable
+
+
+def find_chip(
+    redis,
+    query: str,
+    requested_version: Optional[str] = None,
+) -> Optional[Chip]:
+    """
+    Resolve a chip from Redis using:
+    1. name / alias
+    2. family
+    3. version selection
+    """
+
+    q = query.lower().strip()
+
+    # -------------------------------------------------
+    # 1. Exact match via index (name or alias)
+    # -------------------------------------------------
+    chip_id = redis.get(CHIP_NAME_KEY.format(name=q))
+    if chip_id:
+        return _load_chip(redis, chip_id, requested_version)
+
+    # -------------------------------------------------
+    # 2. Family-based fallback
+    # -------------------------------------------------
+    chips = _load_all_chips(redis)
+
+    family_matches = [
+        c for c in chips
+        if c.family and c.family.lower() == q
+    ]
+
+    if not family_matches:
+        return None
+
+    return _select_version(family_matches, requested_version)
+
+
+def _load_chip(redis, chip_id: bytes, requested_version: Optional[str]) -> Chip:
+    raw = redis.get(CHIP_ID_KEY.format(chip_id=int(chip_id)))
+    chip = Chip.from_api(json.loads(raw))
+
+    if not requested_version or chip.version == requested_version:
+        return chip
+
+    raise ValueError(
+        f"Requested version {requested_version} not available for {chip.name}"
+    )
+
+
+def _load_all_chips(redis) -> list[Chip]:
+    raw = redis.get(CHIP_LIST_KEY)
+    if not raw:
+        raise RuntimeError("Chip list not ingested")
+
+    items = json.loads(raw)
+    return [Chip.from_api(i) for i in items if i]
+
+def _select_version(
+    chips: Iterable[Chip],
+    requested_version: Optional[str],
+) -> Chip:
+    valid = [c for c in chips if c.active]
+
+    if not valid:
+        raise ValueError("No active chips found")
+
+    if requested_version:
+        for c in valid:
+            if c.version == requested_version:
+                return c
+        raise ValueError(f"Version {requested_version} not found")
+
+    # Latest published
+    return max(valid, key=lambda c: Version(c.version))
+
+
+
+
+
 def _extract_family(name: str) -> Optional[str]:
     """
     Normalize chip family.
