@@ -1,3 +1,37 @@
+def _extract_family(name: str) -> Optional[str]:
+    """
+    Normalize chip family.
+
+    Examples:
+    - "SM8850 (KaanapalliT)" → "kaanapalli"
+    - "SM8850 (KaanapalliS) r2" → "kaanapalli"
+    """
+    if "(" not in name:
+        return None
+
+    inside = name.split("(", 1)[1].split(")", 1)[0]
+    base = inside.rstrip("TS0123456789 ").lower()
+
+    return base or None
+
+
+def _extract_alias(name: str) -> Optional[str]:
+    """
+    Optional alias for direct lookup.
+
+    Examples:
+    - "SM8850 (KaanapalliT)" → "kaanapallit"
+    - "SM8850 (KaanapalliS) r2" → "kaanapallis"
+    """
+    if "(" not in name:
+        return None
+
+    inside = name.split("(", 1)[1].split(")", 1)[0]
+    return inside.strip().lower() or None
+
+
+
+
 import asyncio
 import logging
 import redis
