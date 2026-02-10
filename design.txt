@@ -1,3 +1,32 @@
+import re
+
+def _normalize(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", s.lower())
+
+
+def _extract_alias(name: str) -> Optional[str]:
+    """
+    Examples:
+      "SM8850 (KaanapaliT)" -> kaanapali
+      "SM8850 (KaanapaliS)" -> kaanapali
+      "Zealis v3"           -> zealis
+    """
+    m = re.search(r"\(([^)]+)\)", name)
+    if m:
+        base = m.group(1)
+        base = re.sub(r"(tsmc|samsung|[ts])$", "", base.lower())
+        return _normalize(base)
+
+    # fallback: first token
+    return _normalize(name.split()[0])
+
+
+def _extract_family(name: str) -> Optional[str]:
+    # For now: family == alias
+    return _extract_alias(name)
+
+
+
 from packaging.version import Version
 import json
 
