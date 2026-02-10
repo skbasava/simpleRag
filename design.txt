@@ -1,3 +1,66 @@
+from packaging.version import Version
+import json
+
+def _resolve_chip_id(
+    self,
+    chip_name: str,
+    version: str | None = None,
+) -> str | None:
+    """
+    Resolve chip name / alias / family → chip_id.
+    If version is None → pick latest active.
+    """
+
+    name = chip_name.lower().strip()
+
+    # ------------------------------------------------
+    # 1. Fast path: direct name/alias index
+    # ------------------------------------------------
+    chip_id = self.redis.get(
+        CHIP_NAME_KEY.format(name=name)
+    )
+    if chip_id:
+        return chip_id.decode() if isinstance(chip_id, bytes) else chip_id
+
+    # ------------------------------------------------
+    # 2. Fallback: family-based resolution
+    # ------------------------------------------------
+    raw = self.redis.get(CHIP_LIST_KEY)
+    if not raw:
+        return None
+
+    chips = json.loads(raw)
+
+    # Match by family OR name token
+    candidates = [
+        c for c in chips
+        if (
+            c.get("family", "").lower() == name
+            or name in c.get("name", "").lower()
+        )
+    ]
+
+    if not candidates:
+        return None
+
+    # ------------------------------------------------
+    # 3. Version handling
+    # ------------------------------------------------
+    if version:
+        for c in candidates:
+            if c.get("version") == version:
+                return str(c["id"])
+        return None  # explicit version requested but not found
+
+    # ------------------------------------------------
+    # 4. No version → pick latest active
+    # ------------------------------------------------
+    active = [c for c in candidates if c.get("active")]
+    pool = active if active else candidates
+
+    best = max(pool, key=lambda c: Version(c["version"]))
+    return str(best["id"])
+
 
 
 from packaging.version import Version
