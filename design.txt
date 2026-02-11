@@ -1,3 +1,289 @@
+
+import re
+
+
+async def resolve_chip(self, chip_input: str) -> dict | None:
+    """
+    Resolve chip based on:
+      - base family (kaanapali)
+      - optional revision (r2)
+
+    Examples:
+      kaanapali        -> base chip
+      kaanapali r2     -> revision chip
+    """
+
+    if not chip_input:
+        return None
+
+    raw = chip_input.lower().strip()
+
+    # ------------------------------------
+    # 1. Extract revision (r2, r3, etc.)
+    # ------------------------------------
+    revision_match = re.search(r"\br\d+\b", raw)
+    revision = revision_match.group(0) if revision_match else None
+
+    # Remove revision from base search string
+    base_name = re.sub(r"\br\d+\b", "", raw).strip()
+
+    # ------------------------------------
+    # 2. Fetch chip list from API
+    # ------------------------------------
+    resp = self.request(
+        "GET",
+        f"{self.base_url}/api/1/chip/",
+    )
+
+    chips = resp.json()
+
+    if not chips:
+        return None
+
+    # ------------------------------------
+    # 3. Match by family token
+    # ------------------------------------
+    family_matches = []
+
+    for chip in chips:
+        full_name = chip["name"].lower()
+
+        # Extract family inside parentheses
+        match = re.search(r"\((.*?)\)", full_name)
+        family = match.group(1).lower() if match else ""
+
+        if base_name == family or base_name in full_name:
+            family_matches.append(chip)
+
+    if not family_matches:
+        return None
+
+    # ------------------------------------
+    # 4. If revision requested → match exact
+    # ------------------------------------
+    if revision:
+        for chip in family_matches:
+            if revision in chip["name"].lower():
+                return chip
+
+        return None  # revision explicitly requested but not found
+
+    # ------------------------------------
+    # 5. No revision → pick base (no rX)
+    # ------------------------------------
+    for chip in family_matches:
+        if not re.search(r"\br\d+\b", chip["name"].lower()):
+            return chip
+
+    # Fallback: return first match
+    return family_matches[0]
+
+
+
+
+import asyncio
+import json
+from typing import Dict, Any
+from concurrent.futures import ThreadPoolExecutor
+
+from backend.redis_keys import (
+    MPU_KEY,
+    INGEST_DONE_KEY,
+    INGEST_LOCK_KEY,
+)
+from backend.xml_parser import extract_mpus, ingest_single_mpu
+
+
+EXECUTOR = ThreadPoolExecutor(max_workers=8)
+LOCK_TTL = 600
+DONE_TTL = 36 * 3600
+
+
+class PolicyOrchestrator:
+    def __init__(self, client, redis):
+        self.client = client
+        self.redis = redis
+
+    # =====================================================
+    # PUBLIC ENTRY
+    # =====================================================
+
+    async def get_policy_by_mpu(
+        self,
+        chip_name: str,
+        version: str | None,
+        mpu_name: str,
+    ) -> Dict[str, Any]:
+        """
+        Main API entry.
+        """
+
+        # 1️⃣ Resolve chip via API (NOT Redis)
+        chip = await self.client.get_chip_by_name(chip_name)
+        if not chip:
+            raise ValueError(f"Chip not found: {chip_name}")
+
+        chip_id = chip["id"]
+
+        # 2️⃣ Resolve policy via API
+        policy = await self.client.get_policy_for_chip(
+            chip_id=chip_id,
+            version=version,
+        )
+
+        policy_version = policy["version"]
+
+        # 3️⃣ Ensure XML ingestion
+        await self._ensure_ingested(chip_id, policy_version)
+
+        # 4️⃣ Fetch MPU from Redis
+        key = MPU_KEY.format(
+            chip_id=chip_id,
+            policy_version=policy_version,
+            mpu_name=mpu_name.upper(),
+        )
+
+        raw = self.redis.get(key)
+        if not raw:
+            raise KeyError(f"MPU not found: {mpu_name}")
+
+        return json.loads(raw)
+
+    # =====================================================
+    # INGESTION ORCHESTRATION
+    # =====================================================
+
+    async def _ensure_ingested(self, chip_id: int, policy_version: str):
+        done_key = INGEST_DONE_KEY.format(
+            chip_id=chip_id,
+            policy_version=policy_version,
+        )
+
+        lock_key = INGEST_LOCK_KEY.format(
+            chip_id=chip_id,
+            policy_version=policy_version,
+        )
+
+        # Fast path
+        if self.redis.exists(done_key):
+            return
+
+        # Acquire lock
+        if not self.redis.set(lock_key, 1, nx=True, ex=LOCK_TTL):
+            return
+
+        try:
+            await self._ingest_chip(chip_id, policy_version)
+            self.redis.set(done_key, 1, ex=DONE_TTL)
+        finally:
+            self.redis.delete(lock_key)
+
+    async def _ingest_chip(self, chip_id: int, policy_version: str):
+        """
+        Fetch XML → Parse MPUs → Store each MPU
+        """
+
+        async for xml_text in self.client.fetch_policy_xml(
+            chip_id,
+            policy_version,
+        ):
+            mpus = extract_mpus(xml_text)
+
+            loop = asyncio.get_running_loop()
+            tasks = [
+                loop.run_in_executor(
+                    EXECUTOR,
+                    ingest_single_mpu,
+                    xml_text,
+                    chip_id,
+                    policy_version,
+                    mpu,
+                    self.redis,
+                )
+                for mpu in mpus
+            ]
+
+            for t in asyncio.as_completed(tasks):
+                await t
+
+
+
+import json
+import xml.etree.ElementTree as ET
+from backend.redis_keys import MPU_KEY
+
+
+def extract_mpus(xml_text: str):
+    root = ET.fromstring(xml_text)
+    return [m.attrib["name"] for m in root.findall(".//MPU")]
+
+
+def extract_hw_params(mpu_elem):
+    result = {}
+
+    hw = mpu_elem.find("HwConfig")
+    if hw is None:
+        return result
+
+    design = hw.find("HwDesignParameters")
+    if design is not None:
+        result["design"] = {
+            p.attrib["name"]: p.attrib["value"]
+            for p in design.findall("Parameter")
+        }
+
+    integration = hw.find("HwIntegrationParameters")
+    if integration is not None:
+        result["integration"] = {
+            p.attrib["name"]: p.attrib["value"]
+            for p in integration.findall("Parameter")
+        }
+
+    return result
+
+
+def ingest_single_mpu(
+    xml_text: str,
+    chip_id: int,
+    policy_version: str,
+    mpu_name: str,
+    redis_client,
+):
+    root = ET.fromstring(xml_text)
+
+    mpu_elem = root.find(f".//MPU[@name='{mpu_name}']")
+    if mpu_elem is None:
+        return
+
+    hw = extract_hw_params(mpu_elem)
+
+    regions = []
+    for region in mpu_elem.findall(".//Region"):
+        regions.append({
+            "id": region.attrib.get("id"),
+            "raw": ET.tostring(region, encoding="unicode"),
+        })
+
+    payload = {
+        "chip_id": chip_id,
+        "policy_version": policy_version,
+        "mpu": mpu_name,
+        "hw": hw,
+        "regions": regions,
+    }
+
+    key = MPU_KEY.format(
+        chip_id=chip_id,
+        policy_version=policy_version,
+        mpu_name=mpu_name.upper(),
+    )
+
+    redis_client.set(key, json.dumps(payload))
+
+
+
+
+
 import re
 
 def _normalize(s: str) -> str:
