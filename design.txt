@@ -1,3 +1,77 @@
+async def start_policy_export(
+    self,
+    chip_id: str,
+    policy_id: str,
+    published: bool = True,
+) -> tuple[int, str]:
+    """
+    Start async export job.
+    Returns (export_id, token)
+    """
+
+    params = {
+        "chip": chip_id,
+        "policy": policy_id,
+        "async": True,
+        "published": published,
+        "notify": False,
+    }
+
+    resp = self.request(
+        "POST",
+        api="xpu/policy/export/",
+        form=params,
+        response="raw",
+    )
+
+    if resp.status_code != 202:
+        raise IPCatalogRequestError(resp.text)
+
+    data = resp.json()
+
+    export_id = data["id"]
+    token = data["token"]
+
+    return export_id, token
+
+async def fetch_policy_xml(
+    self,
+    export_id: int,
+    token: str,
+    timeout: int = 300,
+    poll_interval: int = 5,
+):
+    """
+    Poll export job and yield XML pages.
+    """
+
+    import time
+
+    start = time.time()
+
+    while True:
+        resp = self.request(
+            "GET",
+            api=f"xpu/policy/export/{export_id}/",
+            params={"raw": True, "token": token},
+            response="raw",
+        )
+
+        if resp.status_code == 202:
+            if time.time() - start > timeout:
+                raise TimeoutError("Policy export timed out")
+            await asyncio.sleep(poll_interval)
+            continue
+
+        if resp.status_code != 200:
+            raise IPCatalogRequestError(resp.text)
+
+        yield resp.text
+        break
+
+
+
+
 
 import re
 
