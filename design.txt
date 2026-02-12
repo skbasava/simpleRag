@@ -1,3 +1,27 @@
+# policy_engine.py
+
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass
+import redis
+import json
+import re
+
+# -----------------------------
+# QueryFacts (Aligned Contract)
+# -----------------------------
+
+@dataclass
+class QueryFacts:
+    chip: Optional[str] = None
+    version: Optional[str] = None
+    mpu: Optional[str] = None
+    region_index: Optional[int] = None
+    address_start: Optional[int] = None
+    address_end: Optional[int] = None
+    profile: Optional[str] = None
+    operation: str = "LOOKUP"   # LOOKUP | LIST | COUNT
+    entity: str = "POLICY"      # POLICY | PROJECT
+
 class UnifiedPolicyEngine:
 
     def __init__(self, redis_client: redis.Redis):
