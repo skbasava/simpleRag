@@ -1,3 +1,145 @@
+class UnifiedPolicyEngine:
+
+    def __init__(self, redis_client: redis.Redis):
+        self.redis = redis_client
+
+    # =============================
+    # Public Entry
+    # =============================
+
+    def search(self, facts: QueryFacts) -> Dict[str, Any]:
+
+        if facts.entity == "PROJECT":
+            return self._handle_project_query(facts)
+
+        # POLICY level queries
+        return self._handle_policy_query(facts)
+
+    # =============================
+    # Project Queries
+    # =============================
+
+    def _handle_project_query(self, facts: QueryFacts):
+
+        keys = self.redis.keys("ipcat:chip:*")
+
+        projects = [k.decode().split(":")[-1] for k in keys]
+
+        if facts.operation == "COUNT":
+            return {"count": len(projects)}
+
+        return {"projects": projects}
+
+    # =============================
+    # Policy Queries
+    # =============================
+
+    def _handle_policy_query(self, facts: QueryFacts):
+
+        if not facts.chip:
+            raise ValueError("Chip required for policy search")
+
+        version = self._resolve_version(facts)
+
+        if facts.region_index is not None:
+            return self._search_by_region(facts, version)
+
+        if facts.address_start is not None:
+            return self._search_by_address(facts, version)
+
+        if facts.operation == "LIST":
+            return self._list_regions(facts, version)
+
+        if facts.operation == "COUNT":
+            return self._count_regions(facts, version)
+
+        raise ValueError("Unsupported policy query")
+
+    # =============================
+    # Region Lookup
+    # =============================
+
+    def _search_by_region(self, facts: QueryFacts, version: str):
+
+        pattern = f"ipcat:region:{facts.chip}:{version}:{facts.mpu}:{facts.region_index}:*"
+
+        keys = self.redis.keys(pattern)
+
+        results = [json.loads(self.redis.get(k)) for k in keys]
+
+        return {"rows": results}
+
+    # =============================
+    # Address Interval Search
+    # =============================
+
+    def _search_by_address(self, facts: QueryFacts, version: str):
+
+        pattern = f"ipcat:region:{facts.chip}:{version}:{facts.mpu}:*"
+
+        keys = self.redis.keys(pattern)
+
+        matched = []
+
+        for key in keys:
+            data = json.loads(self.redis.get(key))
+
+            start = int(data["addr_start"], 16)
+            end = int(data["addr_end"], 16)
+
+            if start <= facts.address_start <= end:
+                if facts.profile and data["profile"] != facts.profile:
+                    continue
+                matched.append(data)
+
+        return {"rows": matched}
+
+    # =============================
+    # LIST Regions
+    # =============================
+
+    def _list_regions(self, facts: QueryFacts, version: str):
+
+        pattern = f"ipcat:region:{facts.chip}:{version}:{facts.mpu}:*"
+
+        keys = self.redis.keys(pattern)
+
+        rows = [json.loads(self.redis.get(k)) for k in keys]
+
+        return {"rows": rows}
+
+    # =============================
+    # COUNT Regions
+    # =============================
+
+    def _count_regions(self, facts: QueryFacts, version: str):
+
+        pattern = f"ipcat:region:{facts.chip}:{version}:{facts.mpu}:*"
+
+        keys = self.redis.keys(pattern)
+
+        return {"count": len(keys)}
+
+    # =============================
+    # Version Resolver
+    # =============================
+
+    def _resolve_version(self, facts: QueryFacts):
+
+        if facts.version:
+            return facts.version
+
+        # fallback latest
+        latest_key = f"ipcat:latest:{facts.chip}"
+        latest = self.redis.get(latest_key)
+
+        if not latest:
+            raise ValueError("Latest version not found")
+
+        return latest.decode()
+
+
+
 
 def parse_regions_from_prtn(
     mpu_elem: ET.Element,
