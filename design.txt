@@ -1,3 +1,190 @@
+
+def parse_regions_from_prtn(
+    mpu_elem: ET.Element,
+    chip: str,
+    version: str,
+    mpu_name: str,
+) -> List[Region]:
+
+    regions = []
+
+    sw_config = mpu_elem.find("SWConfig")
+    if sw_config is None:
+        return regions
+
+    for prtn in sw_config.findall("PRTn"):
+        try:
+            index = int(prtn.attrib.get("index", "-1"))
+            start = int(prtn.attrib.get("start", "0"), 16)
+            end = int(prtn.attrib.get("end", "0"), 16)
+            order = int(prtn.attrib.get("order", "0"))
+
+            profile_str = prtn.attrib.get("profile", "")
+            profiles = [
+                p.strip().upper()
+                for p in profile_str.split(",")
+                if p.strip()
+            ]
+
+            flags_elem = prtn.find("XPU_RGn_FLAGS")
+            flags = flags_elem.attrib if flags_elem is not None else {}
+
+            metadata = {
+                "security_rationale":
+                    (prtn.findtext("SecurityRationale") or "").strip()
+            }
+
+            regions.append(
+                Region(
+                    chip=chip,
+                    version=version,
+                    mpu=mpu_name,
+                    index=index,
+                    start=start,
+                    end=end,
+                    order=order,
+                    profiles=profiles,
+                    flags=flags,
+                    metadata=metadata,
+                )
+            )
+
+        except Exception as e:
+            logger.exception("Failed parsing region: %s", e)
+
+    return regions
+
+from intervaltree import Interval, IntervalTree
+
+def ingest_single_mpu(
+    mpu_elem: ET.Element,
+    chip: str,
+    version: str,
+    redis_client,
+) -> None:
+
+    mpu_name = (
+        mpu_elem.attrib.get("name", "")
+        .strip()
+        .upper()
+    )
+
+    # ---- Store MPU metadata ----
+    mpu_key = f"ipcat:mpu:{chip}:{version}:{mpu_name}"
+
+    redis_client.set(
+        mpu_key,
+        json.dumps({
+            "chip": chip,
+            "version": version,
+            "mpu": mpu_name,
+        }),
+    )
+
+    # ---- Parse regions ----
+    regions = parse_regions_from_prtn(
+        mpu_elem,
+        chip,
+        version,
+        mpu_name,
+    )
+
+    tree = IntervalTree()
+
+    for region in regions:
+
+        region_key = (
+            f"ipcat:region:{chip}:{version}:{mpu_name}:{region.index}"
+        )
+
+        redis_client.set(
+            region_key,
+            json.dumps(region.__dict__),
+        )
+
+        # build interval tree
+        tree.add(
+            Interval(
+                region.start,
+                region.end + 1,
+                region.__dict__,
+            )
+        )
+
+    # ---- Store serialized interval tree ----
+    tree_key = f"ipcat:interval:{chip}:{version}:{mpu_name}"
+
+    serialized = [
+        {
+            "start": iv.begin,
+            "end": iv.end,
+            "data": iv.data,
+        }
+        for iv in tree
+    ]
+
+    redis_client.set(tree_key, json.dumps(serialized))
+
+def load_interval_tree(redis_client, chip, version, mpu):
+    key = f"ipcat:interval:{chip}:{version}:{mpu}"
+    raw = redis_client.get(key)
+    if not raw:
+        return None
+
+    data = json.loads(raw)
+
+    tree = IntervalTree()
+
+    for item in data:
+        tree.add(
+            Interval(
+                item["start"],
+                item["end"],
+                item["data"],
+            )
+        )
+
+    return tree
+
+def search_policy(
+    redis_client,
+    chip: str,
+    version: str,
+    mpu: str,
+    address: int,
+    profile: str | None = None,
+    stage: str | None = None,
+):
+    tree = load_interval_tree(redis_client, chip, version, mpu)
+    if not tree:
+        return []
+
+    matches = tree[address]
+
+    results = []
+
+    for interval in matches:
+        region = interval.data
+
+        # ---- profile filtering ----
+        if profile:
+            if profile.upper() not in region["profiles"]:
+                continue
+
+        # ---- stage filtering (optional future use) ----
+        if stage:
+            # example: NON_STATIC, TME_FW may imply stage
+            if stage.upper() not in region["profiles"]:
+                continue
+
+        results.append(region)
+
+    return results
+
+
+
+
+
 async def start_policy_export(
     self,
     chip_id: str,
