@@ -1,4 +1,15 @@
 
+def _version_key(self, chip, version):
+    return f"ipcat:version:{chip}:{version}"
+
+def _lock_key(self, chip, version):
+    return f"ipcat:lock:{chip}:{version}"
+
+ipcat:version:{chip}:{version} -> READY | IN_PROGRESS | FAILED
+ipcat:lock:{chip}:{version}    -> distributed lock
+ipcat:version_ts:{chip}:{version} -> ingestion timestamp
+
+
 import asyncio
 import time
 
