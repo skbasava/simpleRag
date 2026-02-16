@@ -1,3 +1,90 @@
+
+import asyncio
+import time
+
+LOCK_TTL = 300
+WAIT_TIMEOUT = 60
+POLL_INTERVAL = 1
+
+
+async def _ensure_ingested(self, chip: str, version: str):
+
+    version_key = self._version_key(chip, version)
+    lock_key = self._lock_key(chip, version)
+
+    state = self.redis.get(version_key)
+
+    # ✅ Fast path
+    if state == "READY":
+        return
+
+    # 🔒 Try acquiring distributed lock
+    lock_acquired = self.redis.set(
+        lock_key,
+        "1",
+        nx=True,
+        ex=LOCK_TTL,
+    )
+
+    if lock_acquired:
+        # We are the ingestion owner
+        try:
+            self.redis.set(version_key, "IN_PROGRESS")
+
+            await self._ingest_chip(chip, version)
+
+            self.redis.set(version_key, "READY")
+            self.redis.set(f"{version_key}:ts", int(time.time()))
+
+        except Exception as e:
+            self.redis.set(version_key, "FAILED")
+            raise
+
+        finally:
+            self.redis.delete(lock_key)
+
+    else:
+        # Another worker is ingesting
+        await self._wait_for_ingestion(version_key)
+
+
+async def _wait_for_ingestion(self, version_key):
+
+    start = time.time()
+
+    while time.time() - start < WAIT_TIMEOUT:
+
+        state = self.redis.get(version_key)
+
+        if state == "READY":
+            return
+
+        if state == "FAILED":
+            raise RuntimeError("Ingestion failed")
+
+        await asyncio.sleep(POLL_INTERVAL)
+
+    raise TimeoutError("Timed out waiting for ingestion")
+
+
+async def search_by_address(self, chip, version, mpu, address):
+
+    # 1️⃣ Ensure ingestion
+    await self._ensure_ingested(chip, version)
+
+    # 2️⃣ Load interval tree
+    tree = self._load_interval_tree(chip, version, mpu)
+
+    if not tree:
+        return []
+
+    # 3️⃣ Query
+    matches = tree[address]
+
+    return [interval.data for interval in matches]
+
+
+
 # policy_engine.py
 
 from typing import List, Dict, Any, Optional
