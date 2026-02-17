@@ -1,0 +1,58 @@
+[tool.poetry]
+name = "rag-ip-ipcat"
+version = "0.1.0"
+description = "Unified Policy Engine with Redis RAG + Semantic Kernel + LangChain + Chainlit"
+authors = ["Satish Aradhya"]
+readme = "README.md"
+packages = [{ include = "backend" }]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+# Core
+fastapi = "^0.111.0"
+uvicorn = { extras = ["standard"], version = "^0.30.0" }
+
+# Redis
+redis = "^5.0.4"
+redis-bloom = "^0.4.1"
+
+# XML + infra
+lxml = "^4.9.3"
+tenacity = "^8.2.3"
+python-dotenv = "^1.0.1"
+urllib3 = "^2.2.1"
+
+# Pydantic (LOCKED SAFE RANGE)
+pydantic = ">=2.7.0,<2.8.0"
+pydantic-settings = "^2.2.1"
+
+# AI / LLM stack
+semantic-kernel = "1.10.0"
+langchain = "0.2.14"
+langchain-community = "0.2.12"
+langchain-core = "0.2.30"
+instructor = "1.4.0"
+
+# Chainlit UI
+chainlit = "^1.1.306"
+
+# Internal Qualcomm package
+qgenie-sdk = { version = "*", source = "devpi" }
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+pytest-asyncio = "^0.23.7"
+black = "^24.4.2"
+ruff = "^0.4.5"
+mypy = "^1.10.0"
+
+[tool.poetry.source]
+name = "devpi"
+url = "https://devpi.qualcomm.com/qcom/dev/+simple"
+default = false
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
