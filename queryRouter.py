@@ -1,41 +1,43 @@
 import re
 from enum import Enum
 
-
 class RouteType(str, Enum):
     TAG = "TAG"
     LLM = "LLM"
 
-
 class QueryRouter:
-
-    # 1. Handle Plurals: Use regex syntax for variations
-    # 'polic(?:y|ies)' matches "policy" or "policies"
-    # 'regions?' matches "region" or "regions"
-    # 'address(?:es)?' matches "address" or "addresses"
-    TAG_KEYWORDS_REGEX = [
-        r"polic(?:y|ies)",
-        r"mpu",
-        r"regions?",
-        r"address(?:es)?",
-        r"profiles?",
-        r"counts?",
-        r"lists?",
-        r"versions?",
+    # Patterns for technical retrieval
+    TAG_PATTERNS = [
+        r"polic(?:y|ies)", r"mpus?", r"regions?", r"projects?",
+        r"address(?:es)?", r"profiles?", r"counts?", r"lists?", r"versions?"
+    ]
+    
+    # Phrases that signal a request for an explanation (Conceptual Intent)
+    LLM_INTENT_PATTERNS = [
+        r"\bwhy\b", r"\bhow\b", r"\bexplain\b", r"\bdifference\b", r"\bwhat is\b"
     ]
 
-    # 2. Custom Boundaries: Instead of \b, we use (?<![a-zA-Z0-9]) and (!?[a-zA-Z0-9])
-    # This means "only trigger if the keyword is NOT surrounded by other letters/numbers".
-    # This allows underscores or hyphens to act as valid boundaries (catching CNOC_SS_MPU).
-    KEYWORD_PATTERN = re.compile(
-        rf"(?<![a-zA-Z0-9])(?:{'|'.join(TAG_KEYWORDS_REGEX)})(?![a-zA-Z0-9])", 
+    # Combine into compiled regex for performance
+    # Uses lookarounds to allow underscores (like CNOC_MPU) but block sub-words (like "discount")
+    TAG_REGEX = re.compile(
+        rf"(?<![a-zA-Z0-9])(?:{'|'.join(TAG_PATTERNS)})(?![a-zA-Z0-9])", 
+        re.IGNORECASE
+    )
+    
+    LLM_REGEX = re.compile(
+        rf"(?:{'|'.join(LLM_INTENT_PATTERNS)})", 
         re.IGNORECASE
     )
 
-    ADDRESS_PATTERN = re.compile(r"(?<![a-zA-Z0-9])0x[0-9a-f]+(?![a-zA-Z0-9])", re.IGNORECASE)
-
     @classmethod
     def route(cls, query: str) -> RouteType:
-        if cls.ADDRESS_PATTERN.search(query) or cls.KEYWORD_PATTERN.search(query):
+        # 1. Intent Check: If they ask "Why" or "How", always send to LLM
+        if cls.LLM_REGEX.search(query):
+            return RouteType.LLM
+            
+        # 2. Keyword/Address Check: If no "Why/How", check for TAG keywords
+        if cls.TAG_REGEX.search(query) or "0x" in query.lower():
             return RouteType.TAG
+
+        # 3. Default
         return RouteType.LLM
