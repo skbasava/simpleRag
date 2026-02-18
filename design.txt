@@ -1,3 +1,79 @@
+@cl.on_message
+async def handle_message(message: cl.Message):
+
+    session_id = cl.user_session.get("id")
+    clarify_state = cl.user_session.get("clarify_state")
+
+    # -------------------------------------------------
+    # STEP 1: If user is answering clarification
+    # -------------------------------------------------
+    if clarify_state:
+        # Merge missing field
+        clarify_state["entities"][clarify_state["awaiting"]] = message.content
+        cl.user_session.set("clarify_state", None)
+
+        response = await orchestrator.process(
+            clarify_state["query"],
+            clarify_state["entities"]
+        )
+    else:
+        # Normal flow
+        entities = await orchestrator.extract_entities(message.content)
+
+        response = await orchestrator.process(
+            message.content,
+            entities
+        )
+
+    # -------------------------------------------------
+    # STEP 2: Route Based on Typed Response
+    # -------------------------------------------------
+
+    if response.type == "CLARIFY":
+
+        missing_field = response.missing[0]
+
+        cl.user_session.set(
+            "clarify_state",
+            {
+                "query": message.content,
+                "entities": entities,
+                "awaiting": missing_field,
+            }
+        )
+
+        await cl.Message(
+            content=f"Please provide **{missing_field}**."
+        ).send()
+        return
+
+    if response.type == "TAG":
+
+        await cl.Message(
+            content=response.data
+        ).send()
+        return
+
+    if response.type == "LLM":
+
+        # LLM memory only here
+        memory.append(session_id, "user", message.content)
+
+        history = memory.get(session_id)
+
+        answer = await orchestrator.llm_response(history)
+
+        memory.append(session_id, "assistant", answer)
+        memory.trim(session_id)
+
+        await cl.Message(content=answer).send()
+        return
+
+
+
+
+
+
 ORCHESTRATOR_PROMPT = """
 You are a system orchestrator.
 
