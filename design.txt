@@ -1,3 +1,198 @@
+You are an expert frontend engineer and UI/UX designer. Build a production-grade, 
+professional chat application frontend for "SoC Security Policy Analyzer" — 
+an AI-powered tool for analyzing security policies in System-on-Chip (SoC) cores 
+(e.g., access control matrices, trust zones, memory protection units, 
+interrupt isolation, bus fabric policies).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎨 DESIGN AESTHETIC
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Theme: Dark industrial-technical. Think silicon wafer electron microscope 
+meets secure operations center (SOC dashboard).
+- Background: Deep #0a0e14 with subtle hex-grid or circuit-trace SVG pattern overlay
+- Accent: Electric cyan (#00e5ff) and amber (#ffb300) for critical security alerts
+- Typography: "JetBrains Mono" or "IBM Plex Mono" for all UI + code output; 
+  "Syne" or "Bebas Neue" for headings
+- Visual motif: Faint CPU die floorplan lines in the background
+- Avoid: Purple gradients, white backgrounds, generic sans-serif fonts
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🏗️ LAYOUT & PANELS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Three-panel layout:
+
+LEFT SIDEBAR (240px, collapsible):
+- Session history list with timestamps
+- "New Analysis" button
+- SoC core selector dropdown (e.g., RISC-V, ARM Cortex-M, custom IP)
+- Policy file upload button (JSON/YAML/XML policies)
+- Connection status badge (WebSocket live indicator)
+
+CENTER PANEL (fluid, main chat):
+- Message thread with distinct user vs. AI bubbles
+- AI messages render Markdown with syntax highlighting 
+  (use highlight.js or Prism for register maps, policy tables, hex values)
+- Inline collapsible code/table blocks for policy diffs, ACL matrices
+- Auto-scroll to latest with "Jump to bottom" button when scrolled up
+- Typing indicator (animated 3-dot pulse) when AI is generating
+- Message timestamps on hover
+- Token/character count per message (subtle, bottom-right of bubble)
+
+RIGHT PANEL (320px, collapsible):
+- Active analysis metadata: 
+    • Core name, architecture, policy file loaded
+    • Threat model in use (e.g., CWE-1220, JEDEC-jesd235)
+- Findings summary: severity counters (Critical / High / Medium / Low)
+    with color-coded badges
+- Export buttons: PDF Report, JSON findings, CSV
+- Keyboard shortcuts cheatsheet
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔌 WEBSOCKET ARCHITECTURE (CRITICAL)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Implement a robust WebSocket manager class/module:
+
+1. CONNECTION LIFECYCLE
+   - Connect to ws://localhost:8000/ws/{session_id} (configurable via env/config)
+   - Exponential backoff reconnection: 1s → 2s → 4s → 8s → max 30s
+   - Max reconnect attempts: 10, then show "Connection Failed" with manual retry
+   - Heartbeat/ping every 25s to keep connection alive (send {type: "ping"})
+   - Handle server pong response to confirm connection health
+   - Graceful close on page unload (navigator.sendBeacon or ws.close(1000))
+
+2. MESSAGE PROTOCOL (JSON-based)
+   Outbound (client → server):
+   {
+     "type": "message" | "upload_policy" | "set_core" | "ping",
+     "session_id": "uuid-v4",
+     "payload": { 
+       "content": "string",
+       "attachments": [],
+       "core_context": { "arch": "riscv", "policy_id": "..." }
+     },
+     "timestamp": "ISO8601",
+     "message_id": "uuid-v4"   // for deduplication
+   }
+   
+   Inbound (server → client):
+   {
+     "type": "stream_chunk" | "stream_end" | "finding" | "error" | "pong" | "status",
+     "message_id": "uuid-v4",
+     "payload": { ... }
+   }
+
+3. STREAMING SUPPORT
+   - Handle "stream_chunk" events to append text token-by-token to current AI bubble
+   - Show a blinking cursor at end of streaming message
+   - On "stream_end", finalize the bubble and parse findings from metadata
+
+4. ERROR HANDLING
+   - Display non-blocking toast notifications for transient errors
+   - For fatal errors, show inline error bubble with retry button
+   - Queue outbound messages while disconnected; flush on reconnect
+   - Deduplication: track sent message_ids, ignore duplicate server echoes
+
+5. STATE MANAGEMENT
+   - Use a single WebSocket instance (singleton pattern)
+   - React: useWebSocket custom hook OR Zustand/Redux store for connection state
+   - Expose: connectionState (CONNECTING|OPEN|CLOSING|CLOSED), 
+     sendMessage(), lastMessage, messageHistory[]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💬 CHAT UX FEATURES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Multiline textarea input (Shift+Enter = newline, Enter = send)
+- Cmd/Ctrl+K: focus input, clear, or command palette
+- Drag-and-drop policy file upload onto chat area (highlight drop zone)
+- Message actions on hover: Copy, Regenerate, Flag as Finding, Share snippet
+- Syntax-highlighted code blocks with one-click copy button
+- Security severity tags auto-rendered: 
+  [CRITICAL], [HIGH], [MEDIUM], [LOW] displayed as colored chips inline
+- Collapsible "Thinking..." block if server sends a reasoning trace
+- Support rendering of:
+    • Register maps (styled HTML tables)
+    • Mermaid diagrams (trust zone flows, bus topology)
+    • Diff views for policy before/after comparison
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚙️ CONFIGURATION & SECURITY (FRONTEND)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- All WS endpoint config loaded from .env (VITE_WS_URL, VITE_API_KEY)
+- JWT bearer token injected in WS handshake URL as ?token=xxx or 
+  first message after connect
+- Sanitize all AI-generated HTML before rendering (use DOMPurify)
+- Content Security Policy headers documented in README
+- No secrets stored in localStorage; use sessionStorage or in-memory only
+- Rate-limit UI: disable send button for 500ms after send to prevent 
+  message flooding
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🧩 TECH STACK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Primary: React 18 + TypeScript + Vite
+Styling: Tailwind CSS v3 (dark mode) + custom CSS for animations
+State: Zustand (lightweight) or React Context + useReducer
+WS: Native WebSocket API wrapped in custom hook (no socket.io)
+Markdown: react-markdown + remark-gfm + rehype-highlight
+Diagrams: mermaid.js (lazy-loaded)
+Notifications: react-hot-toast
+Icons: Lucide React
+Testing: Vitest + React Testing Library
+Build: Vite with code splitting; lazy-load right panel and mermaid
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+♿ ACCESSIBILITY & POLISH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- ARIA live region on chat thread (aria-live="polite") for screen readers
+- Focus management: after send, keep focus on input
+- Keyboard navigable sidebar and message actions
+- Reduced motion: wrap all animations in @media (prefers-reduced-motion)
+- Color contrast: all text meets WCAG AA on dark background
+- Loading skeleton for session history on first load
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📁 FILE STRUCTURE TO GENERATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+src/
+  hooks/
+    useWebSocket.ts        ← singleton WS manager with reconnect logic
+    useChat.ts             ← message state, send, history
+  store/
+    chatStore.ts           ← Zustand store
+  components/
+    Sidebar/               ← session list, core selector, upload
+    ChatThread/            ← message list, streaming bubble, scroll behavior
+    MessageBubble/         ← user vs AI, markdown render, findings chips
+    InputBar/              ← textarea, send button, file drop
+    AnalysisPanel/         ← findings summary, metadata, export
+    ConnectionStatus/      ← WS health badge
+  lib/
+    websocket.ts           ← WebSocketManager class
+    sanitize.ts            ← DOMPurify wrapper
+    messageQueue.ts        ← offline queue
+  types/
+    protocol.ts            ← all WS message types (discriminated unions)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚀 DELIVERABLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Generate the complete, runnable implementation. Start with:
+1. useWebSocket.ts hook (full reconnect, ping, queue logic)
+2. chatStore.ts (Zustand)
+3. ChatThread + MessageBubble components
+4. InputBar with drag-drop
+5. App.tsx wiring everything together
+6. index.css with theme variables and circuit-board background
+
+Include inline comments explaining every non-obvious decision, 
+especially in the WebSocket manager. The app should work with 
+a mock WebSocket echo server for development.
+
+
+
+
+
+
 @cl.on_message
 async def handle_message(message: cl.Message):
 
