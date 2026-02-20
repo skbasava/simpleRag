@@ -1,3 +1,59 @@
+import re
+from enum import Enum
+
+class RouteType(str, Enum):
+    TAG = "TAG"
+    LLM = "LLM"
+
+class QueryRouter:
+    # 1. Strict Technical Keywords (including your plural/irregular requirements)
+    TAG_PATTERNS = [
+        r"polic(?:y|ies)", 
+        r"mpus?", 
+        r"regions?", 
+        r"projects?",
+        r"address(?:es)?", 
+        r"profiles?", 
+        r"counts?", 
+        r"lists?", 
+        r"versions?"
+    ]
+    
+    # 2. Conceptual/Explainer words that force an LLM route
+    LLM_INTENT_PATTERNS = [
+        r"\bwhy\b", r"\bhow\b", r"\bexplain\b", r"\bdifference\b", r"\bwhat is\b"
+    ]
+
+    # Compiled with custom boundaries to handle underscores like CNOC_SS_MPU
+    TAG_REGEX = re.compile(
+        rf"(?<![a-zA-Z0-9])(?:{'|'.join(TAG_PATTERNS)})(?![a-zA-Z0-9])", 
+        re.IGNORECASE
+    )
+    
+    LLM_INTENT_REGEX = re.compile(
+        rf"(?:{'|'.join(LLM_INTENT_PATTERNS)})", 
+        re.IGNORECASE
+    )
+
+    ADDRESS_PATTERN = re.compile(r"\b0x[0-9a-f]+\b", re.IGNORECASE)
+
+    @classmethod
+    def route(cls, query: str) -> RouteType:
+        # Step 1: Detect if the query has TAG-specific markers (Address or Keywords)
+        has_tag_marker = cls.ADDRESS_PATTERN.search(query) or cls.TAG_REGEX.search(query)
+        
+        # Step 2: Detect if the user is asking "Why/How/Explain"
+        is_conceptual = cls.LLM_INTENT_REGEX.search(query)
+
+        # Logic: ONLY route to TAG if markers exist AND it's not a conceptual question.
+        if has_tag_marker and not is_conceptual:
+            return RouteType.TAG
+
+        # Step 3: Default Fallback for everything else (Hello, Time, Why MPU, etc.)
+        return RouteType.LLM
+
+
+
 You are an expert frontend engineer and UI/UX designer. Build a production-grade, 
 professional chat application frontend for "SoC Security Policy Analyzer" — 
 an AI-powered tool for analyzing security policies in System-on-Chip (SoC) cores 
