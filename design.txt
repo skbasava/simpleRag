@@ -1,4 +1,96 @@
 
+# normalizer.py
+
+import re
+from rapidfuzz import process
+from typing import List
+
+
+class QueryNormalizer:
+
+    def __init__(self, valid_projects: List[str], valid_mpus: List[str]):
+        self.valid_projects = valid_projects
+        self.valid_mpus = valid_mpus
+
+    # -----------------------------
+    # Main Entry
+    # -----------------------------
+    def normalize(self, query: str) -> str:
+
+        query = query.strip()
+        query = self._normalize_case(query)
+        query = self._normalize_hex(query)
+        query = self._normalize_keywords(query)
+        query = self._normalize_projects(query)
+        query = self._normalize_mpus(query)
+
+        return query
+
+    # -----------------------------
+    # Lowercase but preserve hex
+    # -----------------------------
+    def _normalize_case(self, query: str) -> str:
+        return query.lower()
+
+    # -----------------------------
+    # Normalize hex
+    # -----------------------------
+    def _normalize_hex(self, query: str) -> str:
+
+        hex_pattern = r"\b([0-9a-f]{6,16})\b"
+
+        def replace_hex(match):
+            value = match.group(1)
+            return "0x" + value.upper()
+
+        return re.sub(hex_pattern, replace_hex, query)
+
+    # -----------------------------
+    # Normalize keywords
+    # -----------------------------
+    def _normalize_keywords(self, query: str) -> str:
+
+        replacements = {
+            "fetch": "show",
+            "give": "show",
+            "display": "show",
+            "retrieve": "show"
+        }
+
+        for k, v in replacements.items():
+            query = query.replace(k, v)
+
+        return query
+
+    # -----------------------------
+    # Fuzzy project matching
+    # -----------------------------
+    def _normalize_projects(self, query: str) -> str:
+
+        for word in query.split():
+            match = process.extractOne(word, self.valid_projects, score_cutoff=80)
+            if match:
+                correct = match[0]
+                query = query.replace(word, correct)
+
+        return query
+
+    # -----------------------------
+    # Fuzzy MPU matching
+    # -----------------------------
+    def _normalize_mpus(self, query: str) -> str:
+
+        for word in query.split():
+            match = process.extractOne(word, self.valid_mpus, score_cutoff=75)
+            if match:
+                correct = match[0]
+                query = query.replace(word, correct)
+
+        return query
+
+
+
+
 # Add at the beginning of the builder stage
 ARG NEXT_TURBOPACK_EXPERIMENTAL_SYSTEM_TLS_CERTS
 ENV NEXT_TURBOPACK_EXPERIMENTAL_SYSTEM_TLS_CERTS=$NEXT_TURBOPACK_EXPERIMENTAL_SYSTEM_TLS_CERTS
