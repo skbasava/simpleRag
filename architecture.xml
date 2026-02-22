@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net">
+  <diagram name="Enterprise RAG Architecture">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Stakeholders -->
+        <mxCell id="stakeholders" value="Stakeholders&#10;ACAdmin / DV / SVE / SW / QPS&#10;Queries: address, XPU, diffs, SECACCESS"
+          style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;"
+          vertex="1" parent="1">
+          <mxGeometry x="50" y="50" width="260" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- Interfaces -->
+        <mxCell id="interfaces" value="Interfaces&#10;Web UI (FastAPI)&#10;CLI&#10;WebSocket"
+          style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;"
+          vertex="1" parent="1">
+          <mxGeometry x="350" y="50" width="260" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- Session Workspace -->
+        <mxCell id="session" value="Session Workspace&#10;Uploads + IPCAT exports&#10;Auto-clean TTL"
+          style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;"
+          vertex="1" parent="1">
+          <mxGeometry x="350" y="180" width="260" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- Orchestrator -->
+        <mxCell id="orchestrator" value="AC Bot Orchestrator&#10;Router (TAG/LLM)&#10;SK Agent (Planner)&#10;Retriever (Docs/KB)&#10;Tool Registry&#10;Response Formatter"
+          style="rounded=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;"
+          vertex="1" parent="1">
+          <mxGeometry x="250" y="330" width="460" height="160" as="geometry"/>
+        </mxCell>
+
+        <!-- Policy Engine -->
+        <mxCell id="engine" value="UnifiedPolicyEngine&#10;Deterministic Execution&#10;Version Manager"
+          style="rounded=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;"
+          vertex="1" parent="1">
+          <mxGeometry x="100" y="550" width="300" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- Redis -->
+        <mxCell id="redis" value="Redis Structured Store&#10;MPU + Region schema&#10;Vocabulary Cache"
+          style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;"
+          vertex="1" parent="1">
+          <mxGeometry x="450" y="550" width="300" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- Interval Tree -->
+        <mxCell id="interval" value="Interval Tree Index&#10;Address Search Cache"
+          style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;"
+          vertex="1" parent="1">
+          <mxGeometry x="800" y="550" width="260" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- IPCAT -->
+        <mxCell id="ipcat" value="IPCAT API Service&#10;Async XML Fetch&#10;Policy Export"
+          style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;"
+          vertex="1" parent="1">
+          <mxGeometry x="100" y="720" width="300" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- Jira -->
+        <mxCell id="jira" value="SECACCESS Jira Adapter&#10;Search / Draft / Create Issues"
+          style="rounded=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;"
+          vertex="1" parent="1">
+          <mxGeometry x="450" y="720" width="300" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- Docs -->
+        <mxCell id="docs" value="Docs + Knowledge Base&#10;Confluence / HLDR / FAQs"
+          style="rounded=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;"
+          vertex="1" parent="1">
+          <mxGeometry x="800" y="720" width="260" height="120" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
