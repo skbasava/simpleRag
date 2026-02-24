@@ -1,3 +1,434 @@
+“””
+QGenie Plugin-Prefixed System Message + Routing Fix
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Root cause of this bug:
+QGenie requires FULL plugin-prefixed function calls:
+✓  PolicySearch.get_mpu_summary(project, mpu_name, version)
+✗  get_mpu_summary(project, mpu_name, version)
+
+The system prompt was listing bare function names.
+QGenie’s parser splits on “.” to find plugin + function.
+Without the prefix, it can’t resolve the call → falls back
+to the default plugin (PolicySearch) for EVERYTHING.
+
+This is why even correct function choices like get_mpu_summary
+ended up being called as PolicySearch.get_mpu_summary accidentally,
+and wrong ones like count_resource_groups silently failed resolution.
+
+Fix:
+
+1. All function names in system prompt → PluginName.function_name
+1. All decision tree rules → PluginName.function_name
+1. All few-shot examples   → PluginName.function_name
+1. Recommended function nudge in context → PluginName.function_name
+1. QGenieResponseParser updated to handle “PluginName.function_name”
+   split correctly when building FunctionCallContent
+
+Plugin registry (update PLUGIN_NAME if yours differs):
+“PolicySearch” → your SK plugin registered as kernel.add_plugin(…, plugin_name=“PolicySearch”)
+“””
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+# PLUGIN NAME CONSTANT  — single place to change if plugin is renamed
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+PLUGIN_NAME = “PolicySearch”   # must match kernel.add_plugin(…, plugin_name=…)
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+# HELPER — build “PolicySearch.function_name” consistently
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _fn(function_name: str) -> str:
+“”“Return fully-qualified QGenie function call name.”””
+return f”{PLUGIN_NAME}.{function_name}”
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+# _create_system_message  — all function references use plugin prefix
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+```
+def _create_system_message(self, facts: QueryFacts) -> str:
+    """
+    Create system message with context for the LLM.
+
+    KEY FIX: Every function name in this prompt is written as
+    PluginName.function_name so QGenie can resolve it correctly.
+    Bare function names (without prefix) cause QGenie to fail silently
+    or fall back to PolicySearch for all calls.
+    """
+
+    # ── SECTION 1: Role ───────────────────────────────────────────────────
+    role_section = (
+        "You are an IP Catalog Search Assistant.\n\n"
+        "CRITICAL RULE: You MUST call functions using the full name format:\n"
+        f"  {PLUGIN_NAME}.function_name(param1, param2, ...)\n"
+        f"  Example: {_fn('get_mpu_summary')}(project=\"KAANAPALI\", "
+        f"mpu_name=\"XPU_cfg_Lpass_xpu4\", version=\"latest\")\n\n"
+        "Never call a function without the plugin prefix — "
+        "QGenie will not be able to resolve it.\n\n"
+        "Your role:\n"
+        "- Answer questions about IP policies, MPU regions, and address mappings.\n"
+        "- Always use the specific function that matches the query intent.\n"
+        "- Never guess values — always call a function to retrieve real data.\n"
+        "- If a required parameter is missing, ask the user for it.\n"
+    )
+
+    # ── SECTION 2: Available functions (all with plugin prefix) ───────────
+    # FIXED: every function written as PolicySearch.function_name
+    # This is the exact format QGenie expects when parsing tool calls
+    functions_section = (
+        f"\nAvailable Functions (always call with '{PLUGIN_NAME}.' prefix):\n\n"
+
+        f"1. {_fn('get_mpu_summary')}(project, mpu_name, version)\n"
+        "   → Show full policy details / summary for a specific XPU or MPU.\n"
+        "   → Use for: 'show details', 'policy details', 'details for XPU',\n"
+        "     'show me the policy for', 'information about XPU'\n\n"
+
+        f"2. {_fn('get_regions_for_mpu')}(project, mpu_name, version)\n"
+        "   → List all regions (RGs) defined inside a specific MPU/XPU.\n"
+        "   → Use for: 'regions in', 'RGs for', 'show regions', 'list regions'\n\n"
+
+        f"3. {_fn('get_region_by_index')}(project, mpu_name, region_index, version)\n"
+        "   → Get details for one specific region by its index number.\n"
+        "   → Use for: 'region 3', 'region index N', 'specific region'\n\n"
+
+        f"4. {_fn('count_resource_groups')}(project, version, mpu_name)\n"
+        "   → Count how many RGs/regions an MPU contains.\n"
+        "   → Use for: 'how many RGs', 'count regions', 'number of RGs'\n\n"
+
+        f"5. {_fn('list_mpus')}(project, version)\n"
+        "   → List all MPU/XPU names available in a project.\n"
+        "   → Use for: 'list mpus', 'show mpus', 'what mpus', 'available XPUs'\n\n"
+
+        f"6. {_fn('search_by_address')}(project, address, version, mpu_name)\n"
+        "   → Find which policy/region covers a memory address.\n"
+        "   → Use for: 'address 0x...', 'find address', 'which region has'\n\n"
+
+        f"7. {_fn('search_by_region')}(project, region, version, mpu_name)\n"
+        "   → Look up policies for a specific region index number.\n"
+        "   → Use for: 'for region 5', 'region number', 'region index'\n\n"
+
+        f"8. {_fn('validate_access')}(project, address, region, version)\n"
+        "   → Check whether an address falls within a specific region.\n"
+        "   → Use for: 'validate', 'is address in region', 'check access'\n"
+    )
+
+    # ── SECTION 3: Decision tree (all rules use plugin prefix) ────────────
+    decision_tree_section = (
+        "\n━━━ FUNCTION SELECTION RULES (follow exactly) ━━━\n"
+        "Read the query and apply the FIRST matching rule.\n"
+        f"All calls MUST use the '{PLUGIN_NAME}.' prefix.\n\n"
+
+        "IF query contains ('details for XPU' OR 'policy details' OR\n"
+        "   'show me the policy for' OR 'details for MPU' OR\n"
+        "   'information about XPU' OR 'summary for XPU')\n"
+        f"→ CALL: {_fn('get_mpu_summary')}(project, mpu_name, version)\n"
+        f"→ DO NOT call {_fn('search_by_address')}() or bare get_mpu_summary()\n\n"
+
+        "IF query contains ('regions in' OR 'RGs for' OR\n"
+        "   'show regions' OR 'list regions' OR 'all regions')\n"
+        f"→ CALL: {_fn('get_regions_for_mpu')}(project, mpu_name, version)\n\n"
+
+        "IF query contains ('how many RGs' OR 'count' OR 'number of regions')\n"
+        f"→ CALL: {_fn('count_resource_groups')}(project, version, mpu_name)\n\n"
+
+        "IF query contains a hex address like '0x...'\n"
+        f"→ CALL: {_fn('search_by_address')}(project, address, version, mpu_name)\n\n"
+
+        "IF query contains ('validate' OR 'is address in' OR 'check access')\n"
+        f"→ CALL: {_fn('validate_access')}(project, address, region, version)\n\n"
+
+        "IF query contains ('list mpus' OR 'what mpus' OR 'show mpus')\n"
+        f"→ CALL: {_fn('list_mpus')}(project, version)\n\n"
+
+        "IF NONE of the above match → ask the user to clarify.\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    )
+
+    # ── SECTION 4: Few-shot examples (all calls use plugin prefix) ────────
+    examples_section = (
+        "\nExample interactions:\n\n"
+
+        # XPU detail — the exact failing query
+        "User: Show me the policy details for XPU XPU_cfg_Lpass_xpu4 "
+        "in project KAANAPALI\n"
+        f'✓ CORRECT → {_fn("get_mpu_summary")}('
+        'project="KAANAPALI", mpu_name="XPU_cfg_Lpass_xpu4", version="latest")\n'
+        f'✗ WRONG   → get_mpu_summary(...)  ← missing "{PLUGIN_NAME}." prefix\n'
+        f'✗ WRONG   → {_fn("search_by_address")}(...)  ← wrong function\n\n'
+
+        # Region listing
+        "User: Show regions for AOPSS_MPU_XPU4 in project KAANAPALI\n"
+        f'✓ CORRECT → {_fn("get_regions_for_mpu")}('
+        'project="KAANAPALI", mpu_name="AOPSS_MPU_XPU4", version="latest")\n\n'
+
+        # RG count
+        "User: How many RGs does ANOC_IPA_MPU_XPU4 have in WAIPIO v5.5?\n"
+        f'✓ CORRECT → {_fn("count_resource_groups")}('
+        'project="WAIPIO", version="5.5", mpu_name="ANOC_IPA_MPU_XPU4")\n\n'
+
+        # Address search
+        "User: Which policy covers address 0x00400000 in KAANAPALI?\n"
+        f'✓ CORRECT → {_fn("search_by_address")}('
+        'project="KAANAPALI", address="0x00400000", version="latest", mpu_name=None)\n\n'
+
+        # Validate
+        "User: Is address 0x00800000 in region 3 of KAANAPALI?\n"
+        f'✓ CORRECT → {_fn("validate_access")}('
+        'project="KAANAPALI", address="0x00800000", region=3, version="latest")\n\n'
+    )
+
+    # ── SECTION 5: Context + recommended function with plugin prefix ───────
+    context_lines = ["\nCurrent Query Context (pre-extracted for you):"]
+    context_lines.append(f"- Intent    : {facts.intent or 'not determined'}")
+    context_lines.append(f"- Operation : {facts.operation or 'not determined'}")
+    context_lines.append(f"- Project   : {facts.project or 'NOT PROVIDED — ask user'}")
+    context_lines.append(f"- Version   : {facts.version or 'latest (auto-resolved)'}")
+    context_lines.append(f"- MPU/XPU   : {facts.mpu_name or 'NOT PROVIDED — ask user'}")
+
+    if facts.addr_start is not None:
+        addr_display = (
+            f"0x{facts.addr_start:08X}"
+            if isinstance(facts.addr_start, int)
+            else str(facts.addr_start)
+        )
+        context_lines.append(f"- Address   : {addr_display}")
+
+    if facts.region is not None:
+        context_lines.append(f"- Region    : {facts.region}")
+
+    if facts.entity:
+        context_lines.append(f"- Entity    : {facts.entity}")
+
+    # FIXED: recommended function nudge also uses plugin prefix
+    if facts.mpu_name and facts.intent in (Intent.SEARCH, Intent.EXPLAIN):
+        context_lines.append(
+            f"\n⚡ Recommended function for this query:\n"
+            f"   {_fn('get_mpu_summary')}("
+            f"project={facts.project!r}, "
+            f"mpu_name={facts.mpu_name!r}, "
+            f"version={facts.version or 'latest'!r})"
+        )
+    elif facts.addr_start and facts.intent == Intent.POLICY:
+        addr = (
+            f"0x{facts.addr_start:08X}"
+            if isinstance(facts.addr_start, int)
+            else str(facts.addr_start)
+        )
+        context_lines.append(
+            f"\n⚡ Recommended function for this query:\n"
+            f"   {_fn('search_by_address')}("
+            f"project={facts.project!r}, "
+            f"address={addr!r}, "
+            f"version={facts.version or 'latest'!r}, "
+            f"mpu_name={facts.mpu_name!r})"
+        )
+    elif facts.intent == Intent.VALIDATE:
+        context_lines.append(
+            f"\n⚡ Recommended function for this query:\n"
+            f"   {_fn('validate_access')}("
+            f"project={facts.project!r}, "
+            f"address=..., region=..., "
+            f"version={facts.version or 'latest'!r})"
+        )
+
+    context_section = "\n".join(context_lines) + "\n"
+
+    return (
+        role_section
+        + functions_section
+        + decision_tree_section
+        + examples_section
+        + context_section
+    )
+```
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+# qgenie_connector.py — FunctionCallContent name must also use plugin prefix
+
+# Update _make_tool_call_message to split on “.” correctly
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+```
+def _make_tool_call_message(self, tool_call: dict) -> ChatMessageContent:
+    """
+    Convert a parsed QGenie tool call into SK FunctionCallContent.
+
+    QGenie response format (after our parser extracts it):
+      function = "PolicySearch.get_mpu_summary"   ← already has prefix
+      OR
+      function = "get_mpu_summary"                ← bare name (fallback)
+
+    SK FunctionCallContent name format: "PluginName-function_name"
+    """
+    raw_name  = tool_call["function"]    # e.g. "PolicySearch.get_mpu_summary"
+    arguments = tool_call.get("arguments", {})
+
+    # ── Split plugin.function correctly ───────────────────────────────────
+    if "." in raw_name:
+        # QGenie returned the full prefixed name — split it
+        plugin_part, function_part = raw_name.split(".", 1)
+    else:
+        # Bare name — attach the known plugin name
+        plugin_part   = PLUGIN_NAME
+        function_part = raw_name
+
+    # SK uses "PluginName-function_name" as the FunctionCallContent name
+    sk_function_name = f"{plugin_part}-{function_part}"
+
+    logger.info(
+        "Tool call: raw='%s' → SK name='%s'  args=%s",
+        raw_name, sk_function_name, arguments,
+    )
+
+    function_call_content = FunctionCallContent(
+        id=f"qgenie_{function_part}_{id(arguments)}",
+        name=sk_function_name,
+        arguments=json.dumps(arguments),
+    )
+
+    return ChatMessageContent(
+        role=AuthorRole.ASSISTANT,
+        items=[function_call_content],
+        name=self.ai_model_id,
+    )
+```
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+# QGenieResponseParser — updated regex to capture prefixed function names
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+class QGenieResponseParser:
+“””
+Parses QGenie’s <|token|> format.
+FIXED: regex now captures both bare and prefixed function names:
+to=functions.get_mpu_summary
+to=functions.PolicySearch.get_mpu_summary
+“””
+
+```
+TOOL_CALL_PATTERN = re.compile(
+    r"<\|start\|>.*?<\|channel\|>.*?"
+    r"to=functions\.([\w.]+)"       # FIXED: [\w.]+ captures "PolicySearch.get_mpu_summary"
+    r".*?<\|message\|>"
+    r"(\{.*?\})"
+    r"<\|call\|>",
+    re.DOTALL,
+)
+
+TOKEN_STRIP_PATTERN = re.compile(r"<\|[^|]+\|>")
+
+@classmethod
+def parse(cls, raw_response: str):
+    if not raw_response:
+        return None, None
+
+    match = cls.TOOL_CALL_PATTERN.search(raw_response)
+    if match:
+        raw_function_name = match.group(1).strip()
+        # e.g. "PolicySearch.get_mpu_summary" or "get_mpu_summary"
+        args_json = match.group(2).strip()
+
+        # Normalise: ensure plugin prefix is present
+        if "." not in raw_function_name:
+            full_function_name = f"{PLUGIN_NAME}.{raw_function_name}"
+        else:
+            full_function_name = raw_function_name
+
+        try:
+            arguments = json.loads(args_json)
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse tool call args: %s", args_json)
+            arguments = {}
+
+        logger.info(
+            "QGenie tool call: raw='%s' → resolved='%s'  args=%s",
+            raw_function_name, full_function_name, arguments,
+        )
+        return None, {"function": full_function_name, "arguments": arguments}
+
+    clean_text = cls.TOKEN_STRIP_PATTERN.sub("", raw_response).strip()
+    return clean_text or None, None
+```
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+# QUICK TEST — verify all three pieces work end-to-end with plugin prefix
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+if **name** == “**main**”:
+import re, json, logging
+logging.basicConfig(level=logging.INFO)
+
+```
+print("=" * 60)
+print("TEST 1 — _fn() helper produces correct prefix")
+print("=" * 60)
+assert _fn("get_mpu_summary")       == "PolicySearch.get_mpu_summary"
+assert _fn("count_resource_groups") == "PolicySearch.count_resource_groups"
+assert _fn("list_mpus")             == "PolicySearch.list_mpus"
+print("✅ All _fn() outputs correct")
+
+print("\n" + "=" * 60)
+print("TEST 2 — QGenieResponseParser handles bare + prefixed names")
+print("=" * 60)
+
+# Bare name (what QGenie sometimes emits)
+bare_response = (
+    "<|start|>assistant<|channel|>commentary "
+    "to=functions.get_mpu_summary "
+    "<|constrain|>json<|message|>"
+    '{"project":"KAANAPALI","mpu_name":"XPU_cfg_Lpass_xpu4","version":"latest"}'
+    "<|call|>"
+)
+_, tool_call = QGenieResponseParser.parse(bare_response)
+assert tool_call["function"] == "PolicySearch.get_mpu_summary", \
+    f"Expected prefixed name, got: {tool_call['function']}"
+print(f"✅ Bare name resolved: {tool_call['function']}")
+
+# Already prefixed name
+prefixed_response = (
+    "<|start|>assistant<|channel|>commentary "
+    "to=functions.PolicySearch.get_regions_for_mpu "
+    "<|constrain|>json<|message|>"
+    '{"project":"WAIPIO","mpu_name":"AOPSS_MPU_XPU4","version":"5.5"}'
+    "<|call|>"
+)
+_, tool_call2 = QGenieResponseParser.parse(prefixed_response)
+assert tool_call2["function"] == "PolicySearch.get_regions_for_mpu", \
+    f"Expected prefixed name, got: {tool_call2['function']}"
+print(f"✅ Prefixed name preserved: {tool_call2['function']}")
+
+print("\n" + "=" * 60)
+print("TEST 3 — SK function name format 'PluginName-function_name'")
+print("=" * 60)
+# Simulate what _make_tool_call_message produces
+for raw in ["get_mpu_summary", "PolicySearch.count_resource_groups"]:
+    if "." in raw:
+        plugin_part, fn_part = raw.split(".", 1)
+    else:
+        plugin_part, fn_part = PLUGIN_NAME, raw
+    sk_name = f"{plugin_part}-{fn_part}"
+    print(f"  raw='{raw}' → SK='{sk_name}'")
+print("✅ SK names correctly formatted")
+```
+
+
+
+
+
 
 ```
 def _create_system_message(self, facts: QueryFacts) -> str:
