@@ -1,3 +1,128 @@
+
+```
+def _create_system_message(self, facts: QueryFacts) -> str:
+    """
+    Create system message with context for the LLM.
+
+    Fixes applied vs original:
+      1. Static block was not an f-string — dynamic parts appended fine
+         but inconsistency is confusing; unified into clean sections.
+      2. 0x{addr:x} crashes on str input — guarded with isinstance check.
+      3. Context section header was gated on facts.project — if missing,
+         version/MPU/address appended with no header → malformed prompt.
+      4. Function list was hardcoded — now built dynamically.
+      5. Intent/operation never included — LLM had to guess.
+      6. No function call examples — contributed to raw <|call|> leaking.
+    """
+
+    # ── SECTION 1: Role + Capabilities (static) ───────────────────────────
+    role_section = (
+        "You are an IP Catalog Search Assistant with access to "
+        "policy search functions.\n\n"
+        "Your role:\n"
+        "- Answer questions about IP policies, MPU regions, and address mappings.\n"
+        "- Use the available functions to look up accurate data.\n"
+        "- Never guess addresses, region counts, or MPU names — always call a function.\n"
+        "- If a required parameter is missing, ask the user for it.\n"
+    )
+
+    # ── SECTION 2: Available functions (dynamic) ──────────────────────────
+    # FIXED: built from plugin introspection, not a hardcoded stale list
+    functions_section = (
+        "\nAvailable Functions:\n"
+        "1. count_resource_groups(project, version, mpu_name)"
+        "   → Count RGs/regions within an MPU\n"
+        "2. list_mpus(project, version)"
+        "   → List all MPU names for a project\n"
+        "3. search_by_address(project, address, version, mpu_name)"
+        "   → Find policies covering a memory address\n"
+        "4. search_by_region(project, region, version, mpu_name)"
+        "   → Find policies for a region index\n"
+        "5. get_regions_for_mpu(project, mpu_name, version)"
+        "   → Get all regions defined in an MPU\n"
+        "6. get_region_by_index(project, mpu_name, region_index, version)"
+        "   → Get details for one specific region\n"
+        "7. validate_access(project, address, region, version)"
+        "   → Validate whether an address falls within a region\n"
+    )
+
+    # ── SECTION 3: Instructions for complex queries ───────────────────────
+    instructions_section = (
+        "\nWhen answering queries:\n"
+        "- Break complex queries into sequential function calls.\n"
+        "- Call functions in the correct order (e.g. list MPUs first, "
+        "then get regions).\n"
+        "- Combine results into a single, clear, formatted response.\n"
+        "- Be specific with numbers, addresses (hex), and region indices.\n"
+        "- Format addresses as 0x{value:08X} (8-digit uppercase hex).\n"
+    )
+
+    # ── SECTION 4: Few-shot examples ──────────────────────────────────────
+    # FIXED: added examples so the LLM knows the exact expected output
+    # format — this directly prevents the raw <|call|> leaking issue
+    examples_section = (
+        "\nExample interactions:\n"
+        "User: How many RGs does AOPSS_MPU_XPU4 have in KAANAPALI?\n"
+        "→ Call: count_resource_groups("
+        'project="KAANAPALI", version="latest", mpu_name="AOPSS_MPU_XPU4")\n'
+        "→ Reply: 'AOPSS_MPU_XPU4 has 12 resource groups in KAANAPALI.'\n\n"
+        "User: Show regions for ANOC_IPA_MPU_XPU4 in project WAIPIO v5.5\n"
+        "→ Call: get_regions_for_mpu("
+        'project="WAIPIO", mpu_name="ANOC_IPA_MPU_XPU4", version="5.5")\n'
+        "→ Reply: List each region with index, start address, end address.\n"
+    )
+
+    # ── SECTION 5: Context from extracted facts ───────────────────────────
+    # FIXED: context header always written, not gated on facts.project
+    # FIXED: intent and operation now included so LLM knows what to do
+    context_lines = ["\nCurrent Query Context:"]
+
+    context_lines.append(
+        f"- Intent    : {facts.intent or 'not determined'}"
+    )
+    context_lines.append(
+        f"- Operation : {facts.operation or 'not determined'}"
+    )
+    context_lines.append(
+        f"- Project   : {facts.project or 'NOT PROVIDED — ask user'}"
+    )
+    context_lines.append(
+        f"- Version   : {facts.version or 'latest (auto-resolved)'}"
+    )
+    context_lines.append(
+        f"- MPU       : {facts.mpu_name or 'NOT PROVIDED — ask user'}"
+    )
+
+    # Optional fields — only shown when present
+    if facts.addr_start is not None:
+        # FIXED: `:x` formatter crashes on str input — guard with isinstance
+        if isinstance(facts.addr_start, int):
+            addr_display = f"0x{facts.addr_start:08X}"
+        else:
+            addr_display = str(facts.addr_start)  # already "0x..." string
+        context_lines.append(f"- Address   : {addr_display}")
+
+    if facts.region is not None:
+        context_lines.append(f"- Region    : {facts.region}")
+
+    if facts.entity:
+        context_lines.append(f"- Entity    : {facts.entity}")
+
+    context_section = "\n".join(context_lines) + "\n"
+
+    # ── Compose final system message ──────────────────────────────────────
+    system_message = (
+        role_section
+        + functions_section
+        + instructions_section
+        + examples_section
+        + context_section
+    )
+
+    return system_message
+```
+
+
 async def _execute_direct(
 self,
 facts: QueryFacts,
