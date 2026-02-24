@@ -1,3 +1,176 @@
+async def _execute_direct(
+self,
+facts: QueryFacts,
+user_query: str,
+) -> str:
+“””
+Execute by directly calling the appropriate plugin function based on facts.
+Fast path for simple queries — no auto function calling overhead.
+
+```
+Priority order:
+  1. RG/Region count queries
+  2. Address search
+  3. Region search
+  4. Validation (Intent.VALIDATE)
+  5. MPU listing
+  6. Explain intent → LLM
+  7. Fallback → LLM with context
+"""
+logger.info("Using direct function routing  query='%s'", user_query[:80])
+
+query_lower = user_query.lower().strip()
+
+# ── GUARD: project must always be resolved before any plugin call ─────────
+if not facts.project:
+    logger.warning(
+        "_execute_direct: project is None — cannot route  query='%s'", user_query
+    )
+    return await self._execute_llm_response(user_query, facts)
+
+# ─────────────────────────────────────────────────────────────────────────
+# PRIORITY 1 — RG / Region count queries
+# ─────────────────────────────────────────────────────────────────────────
+RG_COUNT_PHRASES = [
+    "how many rgs", "number of rgs", "count rgs", "rg count",
+    "how many regions", "number of regions", "count regions",
+    "regions per", "rgs per", "rgs supported", "regions supported",
+    "rg per", "region per", "supported per", "no of rgs",
+]
+if any(phrase in query_lower for phrase in RG_COUNT_PHRASES):
+    # FIXED: guard mpu_name — count makes no sense without it
+    if not facts.mpu_name:
+        logger.warning("Priority 1: mpu_name is None — falling through")
+    else:
+        logger.info(
+            "Priority 1 → count_resource_groups  project=%s  version=%s  mpu=%s",
+            facts.project, facts.version, facts.mpu_name,
+        )
+        try:
+            return await self.policy_plugin.count_resource_groups(
+                project=facts.project,
+                version=facts.version,
+                mpu_name=facts.mpu_name,
+            )
+        except Exception as e:
+            logger.error("Priority 1 failed: %s", e)
+            return f"Error counting resource groups: {e}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# PRIORITY 2 — Address search
+# ─────────────────────────────────────────────────────────────────────────
+if facts.addr_start is not None:
+    # FIXED: also guard mpu_name for address search
+    if not facts.mpu_name:
+        logger.warning("Priority 2: addr_start set but mpu_name is None — falling through")
+    else:
+        logger.info(
+            "Priority 2 → search_by_address  project=%s  addr=%s  version=%s  mpu=%s",
+            facts.project, facts.addr_start, facts.version, facts.mpu_name,
+        )
+        try:
+            # FIXED: was missing closing parenthesis on original line 319
+            return await self.policy_plugin.search_by_address(
+                project=facts.project,
+                address=facts.addr_start,
+                version=facts.version,
+                mpu_name=facts.mpu_name,
+            )
+        except Exception as e:
+            logger.error("Priority 2 failed: %s", e)
+            return f"Error searching by address: {e}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# PRIORITY 3 — Region search
+# ─────────────────────────────────────────────────────────────────────────
+if facts.region is not None:
+    logger.info(
+        "Priority 3 → search_by_region  project=%s  region=%s  version=%s  mpu=%s",
+        facts.project, facts.region, facts.version, facts.mpu_name,
+    )
+    try:
+        return await self.policy_plugin.search_by_region(
+            project=facts.project,
+            region=facts.region,
+            version=facts.version,
+            mpu_name=facts.mpu_name,
+        )
+    except Exception as e:
+        logger.error("Priority 3 failed: %s", e)
+        return f"Error searching by region: {e}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# PRIORITY 4 — Validation
+# ─────────────────────────────────────────────────────────────────────────
+if facts.intent == Intent.VALIDATE:
+    logger.info(
+        "Priority 4 → validate_access  project=%s  addr=%s  region=%s  version=%s",
+        facts.project, facts.addr_start, facts.region, facts.version,
+    )
+    try:
+        return await self.policy_plugin.validate_access(
+            project=facts.project,
+            address=facts.addr_start,
+            region=facts.region,
+            version=facts.version,
+        )
+    except Exception as e:
+        logger.error("Priority 4 failed: %s", e)
+        return f"Error validating access: {e}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# PRIORITY 5 — MPU listing
+# FIXED: replaced double-negative any/not-any with a clear positive check
+# ─────────────────────────────────────────────────────────────────────────
+MPU_LIST_PHRASES = [
+    "list mpus", "show mpus", "what mpus", "which mpus",
+    "available mpus", "mpu names", "list xpus", "show xpus",
+]
+# Phrases that indicate the user wants RG/region data, not MPU listing
+# If these are present, this is a region query (already handled in P1/P3)
+MPU_LIST_EXCLUSIONS = [
+    "rg", "region", "count", "how many", "number",
+]
+
+is_mpu_list_query   = any(phrase in query_lower for phrase in MPU_LIST_PHRASES)
+has_region_intent   = any(phrase in query_lower for phrase in MPU_LIST_EXCLUSIONS)
+
+# FIXED: explicit positive check instead of double negative
+if is_mpu_list_query and not has_region_intent:
+    logger.info(
+        "Priority 5 → list_mpus  project=%s  version=%s",
+        facts.project, facts.version,
+    )
+    try:
+        return await self.policy_plugin.list_mpus(
+            project=facts.project,
+            version=facts.version,
+        )
+    except Exception as e:
+        logger.error("Priority 5 failed: %s", e)
+        return f"Error listing MPUs: {e}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# PRIORITY 6 — Explain intent → LLM (no plugin call needed)
+# ─────────────────────────────────────────────────────────────────────────
+if facts.intent == Intent.EXPLAIN:
+    logger.info("Priority 6 → LLM explanation")
+    return await self._execute_llm_response(user_query, facts)
+
+# ─────────────────────────────────────────────────────────────────────────
+# FALLBACK — no priority matched → LLM with full context
+# FIXED: was silently failing with just "if facts.project:" and no handler
+# ─────────────────────────────────────────────────────────────────────────
+logger.info(
+    "Fallback → LLM  no direct route matched  "
+    "intent=%s  mpu=%s  region=%s  addr=%s",
+    facts.intent, facts.mpu_name, facts.region, facts.addr_start,
+)
+return await self._execute_llm_response(user_query, facts)
+```
+
+
+
 def _should_use_auto_function_calling(self, query: str, facts: QueryFacts) -> bool:
 “””
 Decide if query needs auto function calling (multi-step SK tool execution).
