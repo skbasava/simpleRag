@@ -1,3 +1,147 @@
+def _should_use_auto_function_calling(self, query: str, facts: QueryFacts) -> bool:
+“””
+Decide if query needs auto function calling (multi-step SK tool execution).
+
+```
+Returns True when the query is genuinely complex — multi-step reasoning,
+cross-entity comparison, aggregation, or multiple entities involved.
+
+Keep indicators SPECIFIC — overly broad words like "with", "all", "first"
+cause false positives and trigger auto function calling on simple queries.
+"""
+query_lower = query.lower().strip()
+
+# ── 1. MULTI-STEP indicators ──────────────────────────────────────────────
+# User explicitly wants sequential actions
+multi_step_indicators = [
+    "and then",
+    "after that",
+    "followed by",
+    "first.*then",      # regex-style intent: "first do X then do Y"
+]
+
+# ── 2. COMPARISON indicators ──────────────────────────────────────────────
+# User wants to compare two or more things — always needs multiple tool calls
+comparison_indicators = [
+    "compare",
+    "difference between",
+    "versus",
+    " vs ",
+    "which has more",
+    "which has less",
+    "which is higher",
+    "which is lower",
+    "better than",
+    "worse than",
+]
+
+# ── 3. AGGREGATION indicators ─────────────────────────────────────────────
+# User wants rolled-up data across multiple records
+aggregation_indicators = [
+    "total count",
+    "sum of",
+    "average of",
+    "across all projects",
+    "across all versions",
+    "for every project",
+    "for each project",
+]
+
+# ── 4. FILTERING + RANKING indicators ────────────────────────────────────
+# Specific filtering that needs structured tool calls
+filter_rank_indicators = [
+    "filter by",
+    "where project",
+    "that have more than",
+    "that have less than",
+    "exclude",
+    "top 5",
+    "top 10",
+    "bottom 5",
+    "highest mpu",
+    "lowest mpu",
+    "most regions",
+    "fewest regions",
+]
+
+# ── 5. DETAILS / DRILL-DOWN indicators ───────────────────────────────────
+# Queries explicitly asking for deep detail on specific entities
+detail_indicators = [
+    "show me details for",
+    "get details for",
+    "details of",
+    "information about",
+    "breakdown of",
+    "full details",
+    "drill down",
+]
+
+# ── 6. ANALYSIS indicators ────────────────────────────────────────────────
+analysis_indicators = [
+    "analyze",
+    "analyse",
+    "give me an overview of",
+    "statistics for",
+    "summarize all",          # NOT just "summary" — too broad
+    "overview of all",
+]
+
+# ── Combine all structured indicators ────────────────────────────────────
+all_indicators = (
+    multi_step_indicators
+    + comparison_indicators
+    + aggregation_indicators
+    + filter_rank_indicators
+    + detail_indicators
+    + analysis_indicators
+)
+
+# ── Check for indicator match ─────────────────────────────────────────────
+matched_indicator = None
+for indicator in all_indicators:
+    if indicator in query_lower:
+        matched_indicator = indicator
+        break
+
+is_complex = matched_indicator is not None
+
+# ── Check for multiple entities ───────────────────────────────────────────
+# FIX: was > 2 (needs 3+), should be >= 2 (2 entities = comparison needed)
+has_multiple_entities = len(facts.entity) >= 2
+
+# ── Decision with detailed logging ───────────────────────────────────────
+if is_complex:
+    logger.info(
+        "Auto function calling: COMPLEX query detected  "
+        "indicator='%s'  query='%s'",
+        matched_indicator, query[:80],
+    )
+    return True
+
+if has_multiple_entities:
+    logger.info(
+        "Auto function calling: MULTIPLE ENTITIES detected  "
+        "entity_count=%d  entities=%s  query='%s'",
+        len(facts.entity), facts.entity, query[:80],
+    )
+    return True
+
+logger.debug(
+    "Auto function calling: NOT needed  "
+    "is_complex=%s  entity_count=%d  query='%s'",
+    is_complex, len(facts.entity), query[:80],
+)
+return False
+
+
+
+
+
+
+
+
+
+
 
 ✅ 5-Point Version for Leadership (Executive Focus)
 
