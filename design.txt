@@ -1,3 +1,180 @@
+import asyncio
+import logging
+from redis.asyncio import Redis  # ✅ Use async Redis client
+
+logger = logging.getLogger(**name**)
+
+# TTL constants (adjust as needed)
+
+STATE_TTL = 3600      # 1 hour for ingestion state
+LOCK_TTL = 300        # 5 minutes for distributed lock
+LOCK_RETRY_INTERVAL = 0.5   # seconds between lock wait polls
+LOCK_WAIT_TIMEOUT = 120     # max seconds to wait for another worker’s lock
+
+async def ensure_ingested(self, chip_id: int, version: str) -> None:
+“””
+Ensures chip version data is ingested with distributed locking.
+
+```
+Fast-path: returns immediately if already READY.
+Lock-path: acquires distributed lock, ingests if needed.
+Wait-path: if lock held by another worker, waits for completion.
+
+Args:
+    chip_id: The chip identifier
+    version: The version string (e.g., "5.5")
+"""
+version_key = self._version_key(chip_id, version)
+lock_key = self._lock_key(chip_id, version)
+
+logger.info(f"Ensuring ingestion for chip={chip_id}, version={version}")
+
+# ─── Fast path: already ingested ─────────────────────────────────────────
+state = await self.redis.get(version_key)
+
+if state == IngestionState.READY:
+    logger.debug(f"Fast path: data already READY for {chip_id}:{version}")
+    return
+
+# ─── State is None: check if underlying data exists ──────────────────────
+if state is None:
+    data_exists = await self._check_data_exists(chip_id, version)
+    if data_exists:
+        # Data exists but state key is missing (e.g. TTL expired or redis flush)
+        # Acquire lock before marking READY to avoid races
+        lock_acquired = await self.redis.set(
+            lock_key, "1", nx=True, ex=LOCK_TTL
+        )
+        if lock_acquired:
+            try:
+                logger.info(
+                    f"Data exists but state missing, marking READY for "
+                    f"{chip_id}:{version}"
+                )
+                await self.redis.set(version_key, IngestionState.READY, ex=STATE_TTL)
+            finally:
+                await self.redis.delete(lock_key)
+        else:
+            # Another worker is handling it — just wait
+            await self._wait_for_ingestion(version_key, chip_id, version)
+        return
+
+# ─── FAILED state: log warning, fall through to re-ingest ────────────────
+if state == IngestionState.FAILED:
+    logger.warning(
+        f"Previous ingestion FAILED for {chip_id}:{version}, retrying..."
+    )
+
+# ─── Acquire distributed lock to begin ingestion ─────────────────────────
+lock_acquired = await self.redis.set(
+    lock_key, "1", nx=True, ex=LOCK_TTL
+)
+
+if lock_acquired:
+    logger.info(f"Lock acquired for {chip_id}:{version}, starting ingestion")
+    try:
+        await self._perform_ingestion(chip_id, version, version_key, lock_key)
+    except Exception as e:
+        # Mark as FAILED so other workers/retries know
+        await self.redis.set(version_key, IngestionState.FAILED, ex=STATE_TTL)
+        logger.error(
+            f"Ingestion failed for {chip_id}:{version}: {e}", exc_info=True
+        )
+        raise
+    finally:
+        await self.redis.delete(lock_key)
+else:
+    # Another worker holds the lock — wait for it to finish
+    logger.info(
+        f"Lock held by another worker, waiting for {chip_id}:{version}"
+    )
+    await self._wait_for_ingestion(version_key, chip_id, version)
+```
+
+async def _check_data_exists(self, chip_id: int, version: str) -> bool:
+“””
+Checks if data exists in Redis by scanning for known key patterns.
+
+```
+Uses full SCAN iteration (not count=10) to avoid false negatives
+on large keyspaces.
+
+Args:
+    chip_id: The chip identifier
+    version: The version string
+
+Returns:
+    True if any matching keys are found, False otherwise
+"""
+region_pattern = f"ipcat:region:{chip_id}:{version}:*"
+
+try:
+    # ✅ Iterate through ALL cursor pages, not just first batch
+    cursor = 0
+    while True:
+        cursor, keys = await self.redis.scan(
+            cursor, match=region_pattern, count=100
+        )
+        if keys:
+            return True
+        if cursor == 0:
+            break  # Full scan complete, no keys found
+
+    return False
+
+except Exception as e:
+    logger.error(f"Error checking data existence for {chip_id}:{version}: {e}")
+    return False
+```
+
+async def _wait_for_ingestion(
+self,
+version_key: str,
+chip_id: int,
+version: str,
+) -> None:
+“””
+Polls Redis until ingestion is READY or FAILED, or timeout is reached.
+
+```
+Args:
+    version_key: Redis key to poll for state
+    chip_id: Used for logging
+    version: Used for logging
+
+Raises:
+    TimeoutError: If ingestion doesn't complete within LOCK_WAIT_TIMEOUT
+    RuntimeError: If the ingestion performed by another worker FAILED
+"""
+elapsed = 0.0
+
+while elapsed < LOCK_WAIT_TIMEOUT:
+    await asyncio.sleep(LOCK_RETRY_INTERVAL)
+    elapsed += LOCK_RETRY_INTERVAL
+
+    state = await self.redis.get(version_key)
+
+    if state == IngestionState.READY:
+        logger.info(
+            f"Ingestion completed by another worker for {chip_id}:{version} "
+            f"(waited {elapsed:.1f}s)"
+        )
+        return
+
+    if state == IngestionState.FAILED:
+        raise RuntimeError(
+            f"Ingestion failed (performed by another worker) for "
+            f"{chip_id}:{version}"
+        )
+
+raise TimeoutError(
+    f"Timed out waiting for ingestion of {chip_id}:{version} "
+    f"after {LOCK_WAIT_TIMEOUT}s"
+)
+
+
+
+
 description=(
     "Search for memory protection policies by a specific memory address. "
     "Input address must be a decimal integer (convert hex before passing). "
