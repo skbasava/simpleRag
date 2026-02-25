@@ -1,3 +1,10 @@
+def _decode_region(data: bytes | str | None) -> dict | None:
+    if data is None:
+        return None
+    if isinstance(data, bytes):
+        data = data.decode('utf-8')
+    return json.loads(data)
+
 
 async def _search_address_in_all_mpus(
     self, chip_id, version, address, project
