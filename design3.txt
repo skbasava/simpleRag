@@ -1,3 +1,82 @@
+
+async def _search_address_in_all_mpus(
+    self, chip_id, version, address, project
+) -> str:
+
+    # Convert address once
+    address_int = int(address, 16) if str(address).startswith('0x') else int(address)
+    
+    mpu_list = await self.engine.orchestrator.get_mpu_list(str(chip_id), version)
+    redis_client = self.engine.orchestrator.redis
+
+    async def _scan_single_mpu(mpu_name: str) -> list:
+        key_pattern = f"ipcat:region:{chip_id}:{version}:{mpu_name}:*"
+        keys = []
+        cursor = 0
+        while True:
+            cursor, batch = await redis_client.scan(cursor, match=key_pattern, count=100)
+            keys.extend(batch)
+            if cursor == 0:
+                break
+
+        if not keys:
+            return []
+
+        # Fetch all regions in one round trip
+        values = await redis_client.mget(*keys)
+        
+        matches = []
+        for raw in values:
+            region = _decode_region(raw)
+            if not region:
+                continue
+            start = int(region.get('start', 0), 16) if str(region.get('start',0)).startswith('0x') else int(region.get('start', 0))
+            end = int(region.get('end', 0), 16) if str(region.get('end',0)).startswith('0x') else int(region.get('end', 0))
+            if start <= address_int <= end:
+                matches.append({
+                    "mpu_name": mpu_name,
+                    "region_index": region.get("index"),
+                    "start_address": f"0x{start:x}",
+                    "end_address": f"0x{end:x}",
+                    "size": region.get("size"),
+                    "permissions": region.get("permissions", {}),
+                    "profiles": region.get("profiles", []),
+                    "address_offset": address_int - start,
+                    "match": "exact"
+                })
+        return matches
+
+    # ✅ Scan all MPUs concurrently
+    results_per_mpu = await asyncio.gather(
+        *[_scan_single_mpu(mpu) for mpu in mpu_list],
+        return_exceptions=True
+    )
+
+    matches = []
+    for mpu_name, result in zip(mpu_list, results_per_mpu):
+        if isinstance(result, Exception):
+            logger.warning(f"Failed to scan MPU {mpu_name}: {result}")
+        else:
+            matches.extend(result)
+
+    result = {
+        "query": f"Search for address 0x{address_int:x}",
+        "project": project,
+        "address": f"0x{address_int:x}",
+        "chip_id": chip_id,
+        "version": version,
+        "mpus_scanned": len(mpu_list),
+        "matches_found": len(matches),
+        "matches": matches
+    }
+
+    if not matches:
+        result["message"] = f"Address 0x{address_int:x} not found in any MPU region"
+
+    return json.dumps(result, indent=2)
+
+
+
 from dataclasses import dataclass
 from typing import Optional, Any, Dict
 import logging
