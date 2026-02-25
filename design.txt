@@ -1,3 +1,16 @@
+description=(
+    "Search for memory protection policies by a specific memory address. "
+    "Input address must be a decimal integer (convert hex before passing). "
+    "Optionally filter by version or MPU name. If no MPU is specified, "
+    "all MPUs are searched. Returns a JSON string with matching policy results. "
+    "Use when the user asks which policy covers a given address."
+)
+
+
+
+
+
+
 “””
 Fixed: _handle_qgenie_function_call
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
