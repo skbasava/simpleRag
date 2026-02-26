@@ -1,3 +1,52 @@
+
+class OrchestratorPlugin:
+    
+    def __init__(self, query_extractor, address_search, ip_catalog):
+        self.query_extractor = query_extractor
+        self.address_search = address_search
+        self.ip_catalog = ip_catalog
+    
+    @kernel_function(
+        name="orchestrate",
+        description="Call this AFTER route_query. Decides next step based on route."
+    )
+    async def orchestrate(
+        self,
+        query: Annotated[str, "Original user query"],
+        route: Annotated[str, "Route returned by route_query. e.g ROUTE_TO_TAG, ROUTE_TO_LLM"]
+    ) -> str:
+        
+        route_data = json.loads(route)
+        route_type = route_data.get("route")
+
+        # Decision 1: Route needs fact extraction + search
+        if route_type == "ROUTE_TO_TAG":
+            facts_json = await self.query_extractor.extract_facts(query, route)
+            facts = QueryFacts.from_json(facts_json)
+            
+            if facts.operation == "search_address":
+                return await self.address_search.search_address(facts_json)
+            
+            elif facts.operation == "get_mpu_summary":
+                return await self.ip_catalog.get_mpu_summary(facts_json)
+
+        # Decision 2: Route goes directly to LLM - no extraction needed
+        elif route_type == "ROUTE_TO_LLM":
+            return json.dumps({
+                "route": "LLM_DIRECT",
+                "query": query,
+                "message": "Handle this query directly without tool calls"
+            })
+        
+        # Decision 3: Unknown route
+        else:
+            return json.dumps({
+                "error": f"Unknown route: {route_type}",
+                "success": False
+            })
+
+
+
 import asyncio
 import logging
 from redis.asyncio import Redis  # ✅ Use async Redis client
