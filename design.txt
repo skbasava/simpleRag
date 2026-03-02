@@ -1,3 +1,34 @@
+def format_policy_response(policy):
+    return f"""
+## 📍 Policy Details
+
+**Project:** `{policy.project}`  
+**Version:** `{policy.version}`  
+**MPU:** `{policy.mpu}`  
+**Region Index:** `{policy.index}`  
+
+---
+
+### 🔐 Access Control
+
+| Start Address | End Address | Profile |
+|--------------|------------|----------|
+| {hex(policy.start)} | {hex(policy.end)} | {policy.profile} |
+
+---
+
+### 🧠 Hardware Parameters
+{policy.hw_summary}
+
+---
+
+Confidence: 0.98  
+Explainability: Redis Interval Tree Match
+"""
+
+
+
+
 
 class OrchestratorPlugin:
     
