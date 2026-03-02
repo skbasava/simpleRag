@@ -1,3 +1,849 @@
+/* ============================================================
+Chainlit Professional Theme — “Obsidian”
+Place this file at: public/style.css in your Chainlit app
+============================================================ */
+
+/* ── Google Fonts ─────────────────────────────────────────── */
+@import url(‘https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=JetBrains+Mono:wght@400;500&display=swap’);
+
+/* ── CSS Variables ────────────────────────────────────────── */
+:root {
+/* Core palette */
+–bg-base:        #0d0f12;
+–bg-surface:     #13161b;
+–bg-elevated:    #1a1e26;
+–bg-overlay:     #212633;
+–bg-hover:       rgba(255,255,255,0.04);
+
+/* Borders */
+–border-subtle:  rgba(255,255,255,0.06);
+–border-muted:   rgba(255,255,255,0.10);
+–border-active:  rgba(99,179,237,0.40);
+
+/* Brand accent — electric cyan-blue */
+–accent:         #4fa8e8;
+–accent-dim:     rgba(79,168,232,0.15);
+–accent-glow:    rgba(79,168,232,0.30);
+
+/* Text */
+–text-primary:   #e8edf5;
+–text-secondary: #8b95a8;
+–text-muted:     #535d6e;
+–text-code:      #a8d8b0;
+
+/* Message bubbles */
+–bubble-user:    #1a2f48;
+–bubble-ai:      #13161b;
+
+/* Status */
+–success:        #3ecf8e;
+–warning:        #f59e0b;
+–error:          #f87171;
+
+/* Spacing */
+–radius-sm:      6px;
+–radius-md:      12px;
+–radius-lg:      18px;
+–radius-xl:      24px;
+
+/* Typography */
+–font-sans:      ‘DM Sans’, -apple-system, sans-serif;
+–font-mono:      ‘JetBrains Mono’, ‘Fira Code’, monospace;
+
+/* Transitions */
+–transition:     0.18s cubic-bezier(0.4, 0, 0.2, 1);
+–transition-slow: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+
+/* Shadows */
+–shadow-sm:      0 1px 3px rgba(0,0,0,0.4);
+–shadow-md:      0 4px 16px rgba(0,0,0,0.5);
+–shadow-lg:      0 8px 32px rgba(0,0,0,0.6);
+–shadow-glow:    0 0 20px rgba(79,168,232,0.15);
+}
+
+/* ── Reset & Base ─────────────────────────────────────────── */
+*, *::before, *::after {
+box-sizing: border-box;
+margin: 0;
+padding: 0;
+}
+
+html, body, #root {
+height: 100%;
+background: var(–bg-base);
+color: var(–text-primary);
+font-family: var(–font-sans);
+font-size: 15px;
+line-height: 1.6;
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle grid texture on background */
+body::before {
+content: ‘’;
+position: fixed;
+inset: 0;
+background-image:
+linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+background-size: 40px 40px;
+pointer-events: none;
+z-index: 0;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+background: rgba(255,255,255,0.1);
+border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+
+/* ── App Shell ────────────────────────────────────────────── */
+.MuiBox-root {
+position: relative;
+z-index: 1;
+}
+
+/* Main layout container */
+.MuiDrawer-root + .MuiBox-root,
+main {
+background: var(–bg-base) !important;
+}
+
+/* ── Sidebar / Drawer ─────────────────────────────────────── */
+.MuiDrawer-paper {
+background: var(–bg-surface) !important;
+border-right: 1px solid var(–border-subtle) !important;
+width: 260px !important;
+box-shadow: 2px 0 20px rgba(0,0,0,0.3) !important;
+}
+
+/* New chat button */
+.MuiDrawer-paper button[class*=“new-chat”],
+.MuiDrawer-paper a[href=”/”] {
+margin: 12px;
+background: var(–accent-dim) !important;
+border: 1px solid var(–border-active) !important;
+color: var(–accent) !important;
+border-radius: var(–radius-md) !important;
+font-weight: 500 !important;
+transition: all var(–transition) !important;
+}
+
+.MuiDrawer-paper button[class*=“new-chat”]:hover,
+.MuiDrawer-paper a[href=”/”]:hover {
+background: var(–accent-glow) !important;
+box-shadow: var(–shadow-glow) !important;
+}
+
+/* Sidebar conversation items */
+.MuiListItem-root {
+border-radius: var(–radius-sm) !important;
+margin: 2px 8px !important;
+padding: 8px 12px !important;
+transition: background var(–transition) !important;
+color: var(–text-secondary) !important;
+}
+
+.MuiListItem-root:hover {
+background: var(–bg-hover) !important;
+color: var(–text-primary) !important;
+}
+
+.MuiListItem-root.Mui-selected {
+background: var(–accent-dim) !important;
+color: var(–accent) !important;
+border-left: 2px solid var(–accent) !important;
+}
+
+/* ── Header / Navbar ──────────────────────────────────────── */
+header, .MuiAppBar-root {
+background: rgba(13,15,18,0.85) !important;
+backdrop-filter: blur(16px) !important;
+-webkit-backdrop-filter: blur(16px) !important;
+border-bottom: 1px solid var(–border-subtle) !important;
+box-shadow: none !important;
+}
+
+/* Logo / App title */
+header h6, header .MuiTypography-h6 {
+font-size: 15px !important;
+font-weight: 600 !important;
+letter-spacing: 0.01em;
+color: var(–text-primary) !important;
+}
+
+/* ── Chat Container ───────────────────────────────────────── */
+.message-container,
+[class*=“messages”],
+[class*=“MessageContainer”] {
+max-width: 820px;
+margin: 0 auto;
+padding: 24px 20px;
+}
+
+/* ── Message Bubbles ──────────────────────────────────────── */
+/* All messages */
+[class*=“Message”],
+[class*=“message-row”] {
+animation: messageIn 0.25s ease-out both;
+}
+
+@keyframes messageIn {
+from { opacity: 0; transform: translateY(8px); }
+to   { opacity: 1; transform: translateY(0); }
+}
+
+/* User messages */
+[class*=“user”] [class*=“MessageContent”],
+[data-author=“user”] .content {
+background: var(–bubble-user) !important;
+border: 1px solid rgba(79,168,232,0.15) !important;
+border-radius: var(–radius-lg) var(–radius-lg) var(–radius-sm) var(–radius-lg) !important;
+color: var(–text-primary) !important;
+max-width: 78% !important;
+padding: 12px 18px !important;
+margin-left: auto !important;
+box-shadow: var(–shadow-sm) !important;
+}
+
+/* AI / assistant messages */
+[class*=“assistant”] [class*=“MessageContent”],
+[data-author=“assistant”] .content,
+[class*=“ai”] .content {
+background: var(–bubble-ai) !important;
+border: 1px solid var(–border-subtle) !important;
+border-radius: var(–radius-lg) var(–radius-lg) var(–radius-lg) var(–radius-sm) !important;
+color: var(–text-primary) !important;
+padding: 14px 20px !important;
+box-shadow: var(–shadow-sm) !important;
+position: relative;
+}
+
+/* AI accent left-bar */
+[class*=“assistant”] [class*=“MessageContent”]::before,
+[data-author=“assistant”] .content::before {
+content: ‘’;
+position: absolute;
+left: 0;
+top: 8px;
+bottom: 8px;
+width: 2px;
+background: linear-gradient(to bottom, var(–accent), transparent);
+border-radius: 2px;
+}
+
+/* Avatar chips */
+[class*=“Avatar”], .MuiAvatar-root {
+width: 30px !important;
+height: 30px !important;
+font-size: 12px !important;
+font-weight: 600 !important;
+border-radius: var(–radius-sm) !important;
+}
+
+/* AI avatar */
+[class*=“assistant”] .MuiAvatar-root,
+[data-author=“assistant”] .MuiAvatar-root {
+background: linear-gradient(135deg, var(–accent) 0%, #2563eb 100%) !important;
+color: #fff !important;
+box-shadow: 0 0 12px var(–accent-glow) !important;
+}
+
+/* User avatar */
+[class*=“user”] .MuiAvatar-root,
+[data-author=“user”] .MuiAvatar-root {
+background: var(–bg-overlay) !important;
+color: var(–text-secondary) !important;
+}
+
+/* Author label */
+[class*=“authorName”], [class*=“author-name”] {
+font-size: 11px !important;
+font-weight: 600 !important;
+text-transform: uppercase !important;
+letter-spacing: 0.08em !important;
+color: var(–text-muted) !important;
+margin-bottom: 4px !important;
+}
+
+/* Timestamp */
+[class*=“timestamp”], time {
+font-size: 11px !important;
+color: var(–text-muted) !important;
+}
+
+/* ── Code Blocks ──────────────────────────────────────────── */
+pre, code {
+font-family: var(–font-mono) !important;
+}
+
+pre {
+background: #0a0c10 !important;
+border: 1px solid var(–border-subtle) !important;
+border-radius: var(–radius-md) !important;
+padding: 16px 20px !important;
+overflow-x: auto !important;
+font-size: 13px !important;
+line-height: 1.65 !important;
+position: relative;
+margin: 12px 0 !important;
+box-shadow: var(–shadow-md) !important;
+}
+
+/* Code block top bar */
+pre::before {
+content: ‘’;
+display: block;
+height: 2px;
+background: linear-gradient(90deg, var(–accent) 0%, #2563eb 50%, transparent 100%);
+margin: -16px -20px 14px -20px;
+border-radius: var(–radius-md) var(–radius-md) 0 0;
+}
+
+code {
+color: var(–text-code) !important;
+}
+
+/* Inline code */
+p code, li code, td code {
+background: var(–bg-overlay) !important;
+border: 1px solid var(–border-muted) !important;
+border-radius: 4px !important;
+padding: 1px 6px !important;
+font-size: 0.875em !important;
+color: #c9b8f5 !important;
+}
+
+/* ── Markdown Content ─────────────────────────────────────── */
+[class*=“markdown”], .prose {
+color: var(–text-primary);
+line-height: 1.75;
+}
+
+[class*=“markdown”] h1,
+[class*=“markdown”] h2,
+[class*=“markdown”] h3 {
+color: var(–text-primary);
+font-weight: 600;
+margin: 20px 0 10px;
+line-height: 1.3;
+}
+
+[class*=“markdown”] h1 { font-size: 1.5em; }
+[class*=“markdown”] h2 { font-size: 1.25em; }
+[class*=“markdown”] h3 { font-size: 1.1em; }
+
+[class*=“markdown”] p { margin: 0 0 12px; }
+
+[class*=“markdown”] ul,
+[class*=“markdown”] ol {
+padding-left: 20px;
+margin: 8px 0 12px;
+}
+
+[class*=“markdown”] li { margin: 4px 0; }
+
+[class*=“markdown”] blockquote {
+border-left: 3px solid var(–accent);
+padding: 8px 16px;
+margin: 12px 0;
+background: var(–accent-dim);
+border-radius: 0 var(–radius-sm) var(–radius-sm) 0;
+color: var(–text-secondary);
+font-style: italic;
+}
+
+[class*=“markdown”] a {
+color: var(–accent);
+text-decoration: none;
+border-bottom: 1px solid transparent;
+transition: border-color var(–transition);
+}
+
+[class*=“markdown”] a:hover {
+border-bottom-color: var(–accent);
+}
+
+[class*=“markdown”] table {
+width: 100%;
+border-collapse: collapse;
+margin: 12px 0;
+font-size: 14px;
+}
+
+[class*=“markdown”] th {
+background: var(–bg-overlay);
+color: var(–text-primary);
+font-weight: 600;
+padding: 10px 14px;
+text-align: left;
+border: 1px solid var(–border-muted);
+}
+
+[class*=“markdown”] td {
+padding: 9px 14px;
+border: 1px solid var(–border-subtle);
+color: var(–text-secondary);
+}
+
+[class*=“markdown”] tr:hover td {
+background: var(–bg-hover);
+}
+
+[class*=“markdown”] hr {
+border: none;
+border-top: 1px solid var(–border-subtle);
+margin: 20px 0;
+}
+
+/* ── Input Area ───────────────────────────────────────────── */
+[class*=“InputBox”](focus-within,),
+[class*=“inputBox”](focus-within,),
+.MuiPaper-root[class*=“input”] {
+background: var(–bg-elevated) !important;
+border: 1px solid var(–border-muted) !important;
+border-radius: var(–radius-xl) !important;
+box-shadow: var(–shadow-lg), 0 0 0 4px rgba(79,168,232,0.04) !important;
+transition: border-color var(–transition), box-shadow var(–transition) !important;
+max-width: 820px;
+margin: 0 auto !important;
+}
+
+[class*=“inputBox”](focus-within,):focus-within {
+border-color: var(–border-active) !important;
+box-shadow: var(–shadow-lg), 0 0 0 4px var(–accent-dim) !important;
+}
+
+/* Textarea inside input */
+[class*=“InputBox”](focus-within,) textarea,
+[class*=“inputBox”](focus-within,) textarea,
+.MuiInputBase-input {
+background: transparent !important;
+color: var(–text-primary) !important;
+font-family: var(–font-sans) !important;
+font-size: 15px !important;
+line-height: 1.6 !important;
+caret-color: var(–accent) !important;
+resize: none !important;
+}
+
+[class*=“InputBox”](focus-within,) textarea::placeholder,
+.MuiInputBase-input::placeholder {
+color: var(–text-muted) !important;
+opacity: 1 !important;
+}
+
+/* Send button */
+button[class*=“send”],
+button[type=“submit”][class*=“icon”],
+[class*=“SendButton”] {
+background: linear-gradient(135deg, var(–accent) 0%, #2563eb 100%) !important;
+color: #fff !important;
+border: none !important;
+border-radius: 50% !important;
+width: 38px !important;
+height: 38px !important;
+min-width: unset !important;
+box-shadow: 0 2px 12px rgba(79,168,232,0.4) !important;
+transition: all var(–transition) !important;
+display: flex !important;
+align-items: center !important;
+justify-content: center !important;
+}
+
+button[class*=“send”]:hover,
+[class*=“SendButton”]:hover {
+transform: scale(1.08) !important;
+box-shadow: 0 4px 20px rgba(79,168,232,0.6) !important;
+}
+
+button[class*=“send”]:active {
+transform: scale(0.96) !important;
+}
+
+/* ── Action Buttons ───────────────────────────────────────── */
+.MuiButton-root {
+font-family: var(–font-sans) !important;
+font-weight: 500 !important;
+font-size: 13.5px !important;
+letter-spacing: 0.01em !important;
+border-radius: var(–radius-md) !important;
+text-transform: none !important;
+transition: all var(–transition) !important;
+}
+
+.MuiButton-contained {
+background: linear-gradient(135deg, var(–accent) 0%, #2563eb 100%) !important;
+color: #fff !important;
+box-shadow: 0 2px 8px rgba(79,168,232,0.3) !important;
+}
+
+.MuiButton-contained:hover {
+box-shadow: 0 4px 16px rgba(79,168,232,0.5) !important;
+transform: translateY(-1px) !important;
+}
+
+.MuiButton-outlined {
+border: 1px solid var(–border-muted) !important;
+color: var(–text-secondary) !important;
+background: transparent !important;
+}
+
+.MuiButton-outlined:hover {
+border-color: var(–accent) !important;
+color: var(–accent) !important;
+background: var(–accent-dim) !important;
+}
+
+/* Icon buttons */
+.MuiIconButton-root {
+color: var(–text-muted) !important;
+border-radius: var(–radius-sm) !important;
+transition: all var(–transition) !important;
+}
+
+.MuiIconButton-root:hover {
+background: var(–bg-hover) !important;
+color: var(–text-primary) !important;
+}
+
+/* ── Copy Button (code blocks) ────────────────────────────── */
+button[class*=“copy”],
+[class*=“CopyButton”] {
+position: absolute !important;
+top: 10px !important;
+right: 10px !important;
+background: var(–bg-overlay) !important;
+border: 1px solid var(–border-muted) !important;
+color: var(–text-secondary) !important;
+border-radius: var(–radius-sm) !important;
+padding: 4px 10px !important;
+font-size: 11px !important;
+font-family: var(–font-sans) !important;
+cursor: pointer !important;
+transition: all var(–transition) !important;
+opacity: 0;
+}
+
+pre:hover button[class*=“copy”] { opacity: 1 !important; }
+
+button[class*=“copy”]:hover {
+background: var(–accent-dim) !important;
+border-color: var(–accent) !important;
+color: var(–accent) !important;
+}
+
+/* ── Chips / Tags ─────────────────────────────────────────── */
+.MuiChip-root {
+background: var(–bg-overlay) !important;
+border: 1px solid var(–border-subtle) !important;
+color: var(–text-secondary) !important;
+font-family: var(–font-sans) !important;
+font-size: 12px !important;
+border-radius: var(–radius-sm) !important;
+height: 26px !important;
+}
+
+.MuiChip-root:hover {
+border-color: var(–accent) !important;
+color: var(–accent) !important;
+}
+
+/* ── Tooltips ─────────────────────────────────────────────── */
+.MuiTooltip-tooltip {
+background: var(–bg-overlay) !important;
+border: 1px solid var(–border-muted) !important;
+color: var(–text-primary) !important;
+font-size: 12px !important;
+border-radius: var(–radius-sm) !important;
+padding: 6px 10px !important;
+box-shadow: var(–shadow-md) !important;
+}
+
+/* ── Upload / File Attachments ────────────────────────────── */
+[class*=“UploadButton”](hover,),
+[class*=“uploadButton”](hover,) {
+color: var(–text-muted) !important;
+transition: color var(–transition) !important;
+}
+
+[class*=“uploadButton”](hover,):hover {
+color: var(–accent) !important;
+}
+
+[class*=“FileRef”],
+[class*=“attachment”] {
+background: var(–bg-overlay) !important;
+border: 1px solid var(–border-muted) !important;
+border-radius: var(–radius-md) !important;
+padding: 8px 12px !important;
+display: inline-flex;
+align-items: center;
+gap: 8px;
+font-size: 13px;
+color: var(–text-secondary) !important;
+}
+
+/* ── Loading / Streaming ──────────────────────────────────── */
+[class*=“LoaderDots”],
+[class*=“loader”] {
+display: flex;
+gap: 4px;
+align-items: center;
+padding: 4px 0;
+}
+
+[class*=“LoaderDots”] span,
+[class*=“loader”] span {
+width: 6px;
+height: 6px;
+background: var(–accent);
+border-radius: 50%;
+opacity: 0.7;
+animation: dotPulse 1.2s ease-in-out infinite;
+}
+
+[class*=“LoaderDots”] span:nth-child(2),
+[class*=“loader”] span:nth-child(2) { animation-delay: 0.2s; }
+[class*=“LoaderDots”] span:nth-child(3),
+[class*=“loader”] span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dotPulse {
+0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+30% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* Streaming cursor */
+[class*=“streaming”]::after {
+content: ‘▋’;
+color: var(–accent);
+animation: blink 0.9s step-end infinite;
+margin-left: 2px;
+}
+
+@keyframes blink {
+0%, 100% { opacity: 1; }
+50%       { opacity: 0; }
+}
+
+/* ── Task List / Steps ────────────────────────────────────── */
+[class*=“Step”],
+[class*=“TaskList”] {
+border: 1px solid var(–border-subtle) !important;
+border-radius: var(–radius-md) !important;
+background: var(–bg-surface) !important;
+margin: 8px 0 !important;
+overflow: hidden !important;
+}
+
+[class*=“StepHeader”] {
+padding: 10px 16px !important;
+background: var(–bg-elevated) !important;
+border-bottom: 1px solid var(–border-subtle) !important;
+font-weight: 500 !important;
+font-size: 13px !important;
+color: var(–text-secondary) !important;
+display: flex;
+align-items: center;
+gap: 8px;
+}
+
+/* ── Select / Dropdown ────────────────────────────────────── */
+.MuiSelect-select {
+background: var(–bg-elevated) !important;
+color: var(–text-primary) !important;
+border-radius: var(–radius-md) !important;
+}
+
+.MuiMenu-paper {
+background: var(–bg-elevated) !important;
+border: 1px solid var(–border-muted) !important;
+border-radius: var(–radius-md) !important;
+box-shadow: var(–shadow-lg) !important;
+}
+
+.MuiMenuItem-root {
+color: var(–text-secondary) !important;
+font-size: 14px !important;
+transition: background var(–transition) !important;
+}
+
+.MuiMenuItem-root:hover {
+background: var(–bg-hover) !important;
+color: var(–text-primary) !important;
+}
+
+.MuiMenuItem-root.Mui-selected {
+background: var(–accent-dim) !important;
+color: var(–accent) !important;
+}
+
+/* ── Dividers ─────────────────────────────────────────────── */
+.MuiDivider-root {
+border-color: var(–border-subtle) !important;
+}
+
+/* ── Welcome / Empty State ────────────────────────────────── */
+[class*=“Welcome”],
+[class*=“EmptyState”],
+[class*=“Starter”] {
+display: flex;
+flex-direction: column;
+align-items: center;
+text-align: center;
+padding: 60px 20px;
+animation: fadeUp 0.5s ease-out both;
+}
+
+@keyframes fadeUp {
+from { opacity: 0; transform: translateY(20px); }
+to   { opacity: 1; transform: translateY(0); }
+}
+
+[class*=“Welcome”] h1,
+[class*=“Starter”] h2 {
+font-size: 1.75rem !important;
+font-weight: 300 !important;
+color: var(–text-primary) !important;
+margin-bottom: 12px !important;
+letter-spacing: -0.02em;
+}
+
+[class*=“Starter”] p,
+[class*=“Welcome”] p {
+color: var(–text-muted) !important;
+max-width: 480px;
+line-height: 1.7;
+}
+
+/* Starter suggestion chips */
+[class*=“Starter”] button,
+[class*=“StarterButton”](hover,) {
+background: var(–bg-elevated) !important;
+border: 1px solid var(–border-muted) !important;
+border-radius: var(–radius-lg) !important;
+color: var(–text-secondary) !important;
+padding: 10px 20px !important;
+font-size: 14px !important;
+font-family: var(–font-sans) !important;
+transition: all var(–transition) !important;
+cursor: pointer !important;
+}
+
+[class*=“Starter”] button:hover {
+border-color: var(–accent) !important;
+color: var(–accent) !important;
+background: var(–accent-dim) !important;
+box-shadow: var(–shadow-glow) !important;
+transform: translateY(-1px) !important;
+}
+
+/* ── Feedback / Reactions ─────────────────────────────────── */
+[class*=“FeedbackButton”],
+[class*=“thumbs”] {
+color: var(–text-muted) !important;
+font-size: 14px !important;
+border-radius: var(–radius-sm) !important;
+padding: 3px 6px !important;
+transition: all var(–transition) !important;
+}
+
+[class*=“FeedbackButton”]:hover {
+background: var(–bg-hover) !important;
+color: var(–text-primary) !important;
+}
+
+/* ── Modal / Dialog ───────────────────────────────────────── */
+.MuiDialog-paper {
+background: var(–bg-elevated) !important;
+border: 1px solid var(–border-muted) !important;
+border-radius: var(–radius-xl) !important;
+box-shadow: var(–shadow-lg) !important;
+color: var(–text-primary) !important;
+}
+
+.MuiDialogTitle-root {
+font-weight: 600 !important;
+font-size: 16px !important;
+border-bottom: 1px solid var(–border-subtle) !important;
+padding: 18px 24px !important;
+}
+
+.MuiBackdrop-root {
+background: rgba(0,0,0,0.7) !important;
+backdrop-filter: blur(6px) !important;
+}
+
+/* ── Snackbar / Toast ─────────────────────────────────────── */
+.MuiSnackbar-root .MuiPaper-root {
+background: var(–bg-elevated) !important;
+border: 1px solid var(–border-muted) !important;
+border-radius: var(–radius-md) !important;
+color: var(–text-primary) !important;
+box-shadow: var(–shadow-lg) !important;
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 768px) {
+:root { font-size: 14px; }
+
+.message-container,
+[class*=“messages”] {
+padding: 16px 12px;
+}
+
+[class*=“user”] [class*=“MessageContent”] {
+max-width: 90% !important;
+}
+
+[class*=“InputBox”](focus-within,),
+[class*=“inputBox”](focus-within,) {
+border-radius: var(–radius-lg) !important;
+}
+}
+
+@media (max-width: 480px) {
+pre {
+font-size: 12px !important;
+padding: 12px 14px !important;
+}
+}
+
+/* ── Accessibility ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+*, *::before, *::after {
+animation-duration: 0.01ms !important;
+transition-duration: 0.01ms !important;
+}
+}
+
+:focus-visible {
+outline: 2px solid var(–accent) !important;
+outline-offset: 2px !important;
+}
+
+/* ── Selection ────────────────────────────────────────────── */
+::selection {
+background: rgba(79,168,232,0.25);
+color: var(–text-primary);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 def format_policy_response(policy):
     return f"""
 ## 📍 Policy Details
