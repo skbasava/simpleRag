@@ -1,3 +1,27 @@
+
+
+EXTRACTION_PROMPT = """
+Extract facts from the query. Follow these rules strictly:
+
+ENTITY RULES:
+- "List XPUs / List MPUs / Show all MPUs" → entity=PROJECT (listing all items in a project)
+- "Get <specific_name> MPU" → entity=MPU (lookup of specific MPU)  
+- "Search address 0x..." → entity=ADDRESS
+
+EXAMPLES:
+Query: "List XPU's from the project kaanapali"
+→ intent=CATALOG, operation=LIST, entity=PROJECT, project=kaanapali
+
+Query: "List MPUs in kaanapali version 5.5"  
+→ intent=CATALOG, operation=LIST, entity=PROJECT, project=kaanapali, version=5.5
+
+Query: "Get TCSR_REGS_XPU4 MPU summary in kaanapali"
+→ intent=POLICY, operation=LOOKUP, entity=MPU, mpu_name=TCSR_REGS_XPU4, project=kaanapali
+"""
+
+
+
+
 /* ============================================================
 Chainlit Professional Theme — “Obsidian”
 Place this file at: public/style.css in your Chainlit app
